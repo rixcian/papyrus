@@ -1,6 +1,8 @@
 import { Link, Outlet, useNavigate } from 'react-router'
 import { usePwa } from '@/lib/pwa'
 import { useSession } from '@/lib/session'
+import { usePlayerState } from '@/player/provider'
+import { MiniPlayer } from './mini-player'
 import { ProfileAvatar } from './profile-avatar'
 import { Button } from './ui/button'
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/menu'
@@ -11,6 +13,7 @@ export function AppShell() {
   const navigate = useNavigate()
   // Only outside the reader, so an update never interrupts a chapter (ticket 05).
   const { needRefresh, update } = usePwa()
+  const { item: playing } = usePlayerState()
 
   return (
     <UploadProvider>
@@ -49,9 +52,10 @@ export function AppShell() {
             </Button>
           </div>
         )}
-        <main className="mx-auto max-w-6xl p-4 sm:p-6">
+        <main className={`mx-auto max-w-6xl p-4 sm:p-6 ${playing ? 'pb-24 sm:pb-24' : ''}`}>
           <Outlet />
         </main>
+        <MiniPlayer />
       </div>
     </UploadProvider>
   )

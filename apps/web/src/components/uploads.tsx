@@ -136,7 +136,7 @@ const resultText: Record<IngestResult['status'], string> = {
 function UploadTray({ items, onClear }: { items: UploadItem[]; onClear: () => void }) {
   const done = items.filter((i) => i.state === 'done').length
   return (
-    <aside className="fixed right-4 bottom-4 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-border bg-popover shadow-lg">
+    <aside className="fixed right-4 bottom-[calc(1rem+var(--player-offset,0px))] z-40 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-border bg-popover shadow-lg">
       <header className="flex items-center justify-between border-border border-b px-4 py-2.5 text-sm">
         <span className="font-medium">
           Uploads {done}/{items.length}

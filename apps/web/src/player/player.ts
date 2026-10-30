@@ -92,11 +92,24 @@ export class Player {
     audio.addEventListener('playing', () => this.set({ waiting: false }))
     audio.addEventListener('canplay', () => this.set({ waiting: false }))
     audio.addEventListener('error', this.onError)
-    window.addEventListener('pagehide', () => this.save())
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') this.save()
-    })
+  }
+
+  /** Starts listening to the page: saving when it is left, and the lock screen controls. */
+  attach() {
+    window.addEventListener('pagehide', this.onPageHide)
+    document.addEventListener('visibilitychange', this.onVisibility)
     this.setUpMediaSession()
+    return () => {
+      this.close()
+      window.removeEventListener('pagehide', this.onPageHide)
+      document.removeEventListener('visibilitychange', this.onVisibility)
+    }
+  }
+
+  private onPageHide = () => this.save()
+
+  private onVisibility = () => {
+    if (document.visibilityState === 'hidden') this.save()
   }
 
   subscribe = (listener: () => void) => {

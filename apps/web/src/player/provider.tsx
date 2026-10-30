@@ -1,4 +1,11 @@
-import { createContext, type ReactNode, useContext, useState, useSyncExternalStore } from 'react'
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { Player, type PlayerState } from './player'
 
 const PlayerContext = createContext<Player | null>(null)
@@ -8,6 +15,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
   const [player, setPlayer] = useState<Player | null>(null)
   if (audio && !player) setPlayer(new Player(audio))
+  // Leaving for the Profile picker stops playback; it belongs to the Profile.
+  useEffect(() => player?.attach(), [player])
   return (
     <>
       {/* biome-ignore lint/a11y/useMediaCaption: audiobooks have no captions to offer */}
