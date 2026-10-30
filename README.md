@@ -1,14 +1,57 @@
-# Papyrus
+<h1 align="center">Papyrus</h1>
 
-A self-hosted library, reader and audiobook player for **epub**, **mobi**, **azw3** and audiobooks (**mp3**, **m4a**, **m4b**). One Docker image serves the API and the web app, which you can install on phones and computers and use offline.
+<p align="center">
+  A self-hosted library, reader and audiobook player for your household.<br>
+  <b>epub</b> · <b>mobi</b> · <b>azw3</b> · <b>mp3</b> · <b>m4a</b> · <b>m4b</b>
+</p>
 
-- **Library**: upload or drop in books; metadata and covers are read from the files. Search, filter by author, series, tag, shelf and Read Status, in a grid or a list.
-- **Reader**: themes, fonts, paginated or scrolling, contents, search inside the book, Bookmarks, Highlights with Notes, Markdown export, and translating a selection (with DeepL).
-- **Audiobooks**: an audiobook is another File of a Book, next to its epub. Chapters, speed, a sleep timer, Bookmarks, lock-screen controls, and a mini-player that keeps playing while you browse.
-- **Profiles**: everyone in the household gets their own library, progress and highlights. Books can be Shared with other Profiles.
-- **Sync**: reading position, Highlights and Bookmarks follow you between devices, and work offline.
-- **Import folder**: drop files, or a whole Calibre library, into a folder and they are imported.
-- **Find online**: fill in missing details and covers from Open Library.
+<p align="center">
+  One Docker image serves the API and the web app, which you can install on phones and computers and use offline.
+</p>
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/library-dark.png">
+        <img src="docs/screenshots/library.png" width="250" alt="The library: continue reading, search, filters and a grid of covers">
+      </picture>
+      <br><sub>Library</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/book.png" width="250" alt="A Book with both an ebook and an audiobook">
+      <br><sub>A Book with an ebook and an audiobook</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/player.png" width="250" alt="The audiobook player">
+      <br><sub>Audiobook player</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/screenshots/reader.png" width="250" alt="The reader with a highlighted sentence">
+      <br><sub>Reader</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/highlights.png" width="250" alt="Highlights and bookmarks, with Markdown export">
+      <br><sub>Highlights and Bookmarks</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/library-dark.png" width="250" alt="The library in the dark theme">
+      <br><sub>Dark theme</sub>
+    </td>
+  </tr>
+</table>
+
+## Features
+
+- 📚 **Library**: upload or drop in books; metadata and covers are read from the files. Search, filter by author, series, tag, shelf and Read Status, in a grid or a list.
+- 📖 **Reader**: themes, fonts, paginated or scrolling, contents, search inside the book, Bookmarks, Highlights with Notes, Markdown export, and translating a selection (with DeepL).
+- 🎧 **Audiobooks**: an audiobook is another File of a Book, next to its epub. Chapters, speed, a sleep timer, Bookmarks, lock-screen controls, and a mini-player that keeps playing while you browse.
+- 👨‍👩‍👧 **Profiles**: everyone in the household gets their own library, progress and highlights. Books can be Shared with other Profiles.
+- 🔄 **Sync**: reading position, Highlights and Bookmarks follow you between devices, and work offline.
+- 📥 **Import folder**: drop files, or a whole Calibre library, into a folder and they are imported.
+- 🔎 **Find online**: fill in missing details and covers from Open Library.
 
 > [!WARNING]
 > **Papyrus has no login.** Profiles are for keeping libraries apart, not for security: anyone who can reach the server can open every Profile and change or delete anything. Run it on a private network (your LAN, Tailscale, a VPN), or put authentication in front of it, as in the Caddy example below.
@@ -143,6 +186,8 @@ pnpm dev          # API on :8080 and the web app on :5173 (open this one)
 | `pnpm gen:api`   | Regenerate the web app's API types after changing a server route           |
 
 The service worker only runs in a production build; `pnpm dev` doesn't register it.
+
+The README screenshots are made by `scripts/screenshots.ts`: it starts the built app on a throwaway data folder, fills it with public-domain classics and an audiobook (needs ffmpeg), and photographs it at phone size. After a visible change, run `pnpm build && node scripts/screenshots.ts` and commit `docs/screenshots/`.
 
 Layout:
 
