@@ -33,6 +33,7 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
 - [Which reader engine renders epub and mobi/azw3 in the browser?](issues/01-reader-engine.md): foliate-js. It is the only option that reads epub and mobi/azw3 natively, gives CFI locators, an annotation overlay and search, and opens Blobs offline. Pin a commit, since its API is unstable, and write our own React wrapper.
 - [Data layer and API contract: SQLite driver, ORM/migrations, typed Fastify↔React contract](issues/04-data-layer-and-api.md): better-sqlite3 (prebuilt binaries, FTS5 included) with Drizzle and drizzle-kit migrations that run on start. Fastify 5 uses a Zod type provider and generates OpenAPI; the client uses openapi-fetch + TanStack Query. Book Files stream through `@fastify/static` with range support.
 - [How do we pull metadata and covers out of epub/mobi/azw3 on a Node server?](issues/03-metadata-extraction.md): an in-house extractor. epub uses yauzl + fast-xml-parser on the OPF; mobi/azw3 parses PDB/EXTH, modelled on foliate-js mobi.js. Series reads EPUB 3 first, then Calibre metas, stored as REAL. MOBI carries no series, so it must be editable. Calibre is rejected (about 650 MiB).
+- [Sharing model: how does a Profile Share Books with another Profile?](issues/06-sharing-model.md): a Share covers one Book and goes to named Profiles or everyone. Recipients only read; reading state is always per Profile. On revoke, the Recipient's state is kept but hidden; deleting the Book removes it. Recipients can hide Books. The same file added by two Profiles makes two Books, never merged (ADR 0001).
 
 ## Not yet specified
 
@@ -49,3 +50,4 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
 - Reading PDFs and comics (cbz/cbr) in the browser: they can be stored, not read.
 - An instance password, user accounts, or an Owner/admin role: ruled out at charting.
 - Multi-arch images: amd64 only for now.
+- Sharing a whole library or a shelf in one Share, and notifications for new Shares: ruled out by [Sharing model](issues/06-sharing-model.md). v1 Shares one Book at a time, and "everyone" covers the family case.

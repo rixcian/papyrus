@@ -7,10 +7,16 @@ _Avoid_: title, item, ebook (when meaning the work rather than the file)
 _Avoid_: edition, format, copy
 
 **Profile**: A person who uses the instance, with their own Books and reading state. Profiles are picked without a password, and every Profile can do the same things.
-_Avoid_: user, account, owner, admin
+_Avoid_: user, account, owner, admin (as a role)
 
-**Share**: Making a Profile's Book (or Books) visible to another Profile. Without a Share, a Profile only sees its own Books.
+**Owning Profile**: The Profile a Book belongs to: the one that added it. Only the Owning Profile can change the Book (metadata, tags, Files), delete it, or Share it.
+_Avoid_: owner (on its own), uploader
+
+**Share**: Making one Book visible to other Profiles, either named Profiles or everyone (all Profiles, including ones created later). Without a Share, a Profile only sees its own Books. A Share lets the Recipient read; it never lets them change the Book.
 _Avoid_: grant, permission
+
+**Recipient**: A Profile that a Book is Shared with. A Recipient can read the Book, mark it as an Offline Book, put it on their own shelves, and hide it from their own library. They cannot change, delete, or re-share it.
+_Avoid_: viewer, guest
 
 **Reading Progress**: How far a Profile has got in a particular File of a Book.
 _Avoid_: position, bookmark (a bookmark is a separate, deliberate marker)
