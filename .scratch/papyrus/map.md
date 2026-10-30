@@ -34,6 +34,7 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
 - [Data layer and API contract: SQLite driver, ORM/migrations, typed Fastify↔React contract](issues/04-data-layer-and-api.md): better-sqlite3 (prebuilt binaries, FTS5 included) with Drizzle and drizzle-kit migrations that run on start. Fastify 5 uses a Zod type provider and generates OpenAPI; the client uses openapi-fetch + TanStack Query. Book Files stream through `@fastify/static` with range support.
 - [How do we pull metadata and covers out of epub/mobi/azw3 on a Node server?](issues/03-metadata-extraction.md): an in-house extractor. epub uses yauzl + fast-xml-parser on the OPF; mobi/azw3 parses PDB/EXTH, modelled on foliate-js mobi.js. Series reads EPUB 3 first, then Calibre metas, stored as REAL. MOBI carries no series, so it must be editable. Calibre is rejected (about 650 MiB).
 - [Sharing model: how does a Profile Share Books with another Profile?](issues/06-sharing-model.md): a Share covers one Book and goes to named Profiles or everyone. Recipients only read; reading state is always per Profile. On revoke, the Recipient's state is kept but hidden; deleting the Book removes it. Recipients can hide Books. The same file added by two Profiles makes two Books, never merged (ADR 0001).
+- [Profile lifecycle: creating, switching, and deleting Profiles](issues/07-profile-lifecycle.md): anyone creates a Profile from the picker; zero Profiles shows a first-run screen. A Profile is a unique name plus a colour/initial avatar. Each device remembers its Active Profile, which is sent as a `papyrus_profile` cookie, so File URLs and offline cache entries stay Profile-independent. A Profile can rename or delete only itself, and deletion hard-deletes its Books and state.
 
 ## Not yet specified
 
@@ -51,3 +52,4 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
 - An instance password, user accounts, or an Owner/admin role: ruled out at charting.
 - Multi-arch images: amd64 only for now.
 - Sharing a whole library or a shelf in one Share, and notifications for new Shares: ruled out by [Sharing model](issues/06-sharing-model.md). v1 Shares one Book at a time, and "everyone" covers the family case.
+- Transferring a deleted Profile's Books to another Profile, and uploaded avatar images: ruled out by [Profile lifecycle](issues/07-profile-lifecycle.md). Deleting a Profile hard-deletes its Books in v1.

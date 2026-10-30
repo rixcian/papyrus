@@ -9,6 +9,9 @@ _Avoid_: edition, format, copy
 **Profile**: A person who uses the instance, with their own Books and reading state. Profiles are picked without a password, and every Profile can do the same things.
 _Avoid_: user, account, owner, admin (as a role)
 
+**Active Profile**: The Profile currently picked on a given device or browser. Everything that device shows and records belongs to the Active Profile until someone switches.
+_Avoid_: current user, logged-in profile, session
+
 **Owning Profile**: The Profile a Book belongs to: the one that added it. Only the Owning Profile can change the Book (metadata, tags, Files), delete it, or Share it.
 _Avoid_: owner (on its own), uploader
 
