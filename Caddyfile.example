@@ -1,0 +1,22 @@
+# Replace with your domain; Caddy fetches and renews the certificate itself.
+books.example.com {
+	encode zstd gzip
+
+	# Papyrus has no login of its own. To require one, uncomment and generate a hash with
+	#   docker compose run --rm caddy caddy hash-password
+	# basic_auth {
+	# 	reader $2a$14$replace-with-the-hash
+	# }
+
+	reverse_proxy papyrus:8080 {
+		# Uploads can be large and slow.
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+
+	request_body {
+		max_size 600MB
+	}
+}

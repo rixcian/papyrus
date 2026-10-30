@@ -1,0 +1,49 @@
+# Papyrus behind Caddy, which gets a TLS certificate for you. HTTPS is needed for the
+# installable app and Offline Books (browsers allow those only on secure origins).
+#
+#   cp docker-compose.example.yml docker-compose.yml
+#   cp Caddyfile.example Caddyfile        # then set your domain in it
+#   docker compose up -d
+#
+# Papyrus has NO login. Anyone who can reach it can open, change and delete every library.
+# Keep it on a private network (LAN, Tailscale, a VPN), or add authentication in Caddy:
+# see the basic_auth example in Caddyfile.example.
+
+services:
+  papyrus:
+    image: ghcr.io/OWNER/papyrus:latest # replace OWNER with the GitHub user or org
+    restart: unless-stopped
+    environment:
+      # Caddy is the only client, so trust it for the real client address.
+      PAPYRUS_TRUST_PROXY: "true"
+      # Each Profile gets /import/<Profile name>/; drop books or a Calibre library there.
+      PAPYRUS_IMPORT_DIR: /import
+      # PAPYRUS_IMPORT_DELETE_SOURCE: "true"
+      # PAPYRUS_MAX_UPLOAD_MB: "500"
+      # Translate selections in the reader (DeepL; free keys end in ":fx").
+      # PAPYRUS_DEEPL_API_KEY: "your-key:fx"
+    volumes:
+      - papyrus-data:/data
+      - ./import:/import
+    # Not published: only Caddy talks to it.
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - papyrus
+
+volumes:
+  papyrus-data:
+  caddy-data:
+  caddy-config:
