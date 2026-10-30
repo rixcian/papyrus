@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router'
 import { AppShell } from './components/app-shell'
 import { useProfiles, useSession } from './lib/session'
+import { BookPage } from './pages/book'
 import { LibraryPage } from './pages/library'
 import { ProfilesPage } from './pages/profiles'
 import { SettingsPage } from './pages/settings'
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <LibraryPage /> },
+          { path: 'books/:bookId', element: <BookPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

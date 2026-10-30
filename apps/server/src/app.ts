@@ -12,6 +12,7 @@ import {
 import Fastify, { type FastifyInstance } from 'fastify'
 import { BlobStore } from './books/blobs.ts'
 import { Ingest } from './books/ingest.ts'
+import { Library } from './books/library.ts'
 import { bookRoutes } from './books/routes.ts'
 import type { Config } from './config.ts'
 import type { Db } from './db/client.ts'
@@ -60,12 +61,13 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
   const blobs = new BlobStore(config.dataDir)
   const coversDir = path.join(config.dataDir, 'covers')
   const ingest = new Ingest(db, blobs, coversDir)
+  const library = new Library(db, blobs, coversDir)
 
   app.get('/api/openapi.json', { schema: { hide: true } }, async () => app.swagger())
   await app.register(healthRoutes)
-  await app.register(profileRoutes(db))
+  await app.register(profileRoutes(db, library))
   await app.register(
-    bookRoutes({ db, blobs, ingest, coversDir, maxUploadBytes: config.maxUploadBytes }),
+    bookRoutes({ db, blobs, ingest, library, maxUploadBytes: config.maxUploadBytes }),
   )
 
   return app

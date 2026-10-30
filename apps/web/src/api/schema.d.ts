@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/books/{bookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getBook"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteBook"];
+        options?: never;
+        head?: never;
+        patch: operations["updateBook"];
+        trace?: never;
+    };
     "/api/books/{bookId}/cover": {
         parameters: {
             query?: never;
@@ -127,6 +143,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{fileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFile"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteFile"];
         options?: never;
         head?: never;
         patch?: never;
@@ -474,6 +506,213 @@ export interface operations {
             };
         };
     };
+    getBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        title: string;
+                        authors: string[];
+                        seriesName: string | null;
+                        seriesIndex: number | null;
+                        coverUrl: string | null;
+                        owned: boolean;
+                        addedAt: number;
+                        description: string | null;
+                        language: string | null;
+                        publisher: string | null;
+                        publishedDate: string | null;
+                        isbn: string | null;
+                        tags: string[];
+                        ownerName: string;
+                        files: {
+                            id: string;
+                            /** @enum {string} */
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            originalName: string;
+                            size: number;
+                            readable: boolean;
+                            url: string;
+                            addedAt: number;
+                        }[];
+                        updatedAt: number;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    deleteBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null;
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    updateBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    title?: string;
+                    authors?: string[];
+                    description?: string | null;
+                    language?: string | null;
+                    publisher?: string | null;
+                    publishedDate?: string | null;
+                    isbn?: string | null;
+                    seriesName?: string | null;
+                    seriesIndex?: number | null;
+                    tags?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        title: string;
+                        authors: string[];
+                        seriesName: string | null;
+                        seriesIndex: number | null;
+                        coverUrl: string | null;
+                        owned: boolean;
+                        addedAt: number;
+                        description: string | null;
+                        language: string | null;
+                        publisher: string | null;
+                        publishedDate: string | null;
+                        isbn: string | null;
+                        tags: string[];
+                        ownerName: string;
+                        files: {
+                            id: string;
+                            /** @enum {string} */
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            originalName: string;
+                            size: number;
+                            readable: boolean;
+                            url: string;
+                            addedAt: number;
+                        }[];
+                        updatedAt: number;
+                    };
+                };
+            };
+            /** @description Default Response */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
     getBookCover: {
         parameters: {
             query?: never;
@@ -491,6 +730,86 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getFile: {
+        parameters: {
+            query?: {
+                download?: "1";
+            };
+            header?: never;
+            path: {
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null;
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
             };
         };
     };

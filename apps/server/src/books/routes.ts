@@ -1,15 +1,21 @@
+import path from 'node:path'
 import type { FastifyPluginAsyncZod } from '@fastify/type-provider-zod'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import type { Db } from '../db/client.ts'
-import { bookAuthors, books, files } from '../db/schema.ts'
+import { type BookRow, bookAuthors, books, bookTags, profiles } from '../db/schema.ts'
 import { AppError, notFound } from '../errors.ts'
 import { requireProfile } from '../session.ts'
 import type { BlobStore } from './blobs.ts'
-import { FILE_FORMATS } from './formats.ts'
+import { FILE_FORMATS, type FileFormat, READABLE_FORMATS } from './formats.ts'
 import type { Ingest } from './ingest.ts'
+import type { Library } from './library.ts'
+import { matchKey, normaliseIsbn, sortTitle } from './metadata.ts'
 
 const ErrorBody = z.object({ error: z.string(), message: z.string() })
+const Format = z.enum(FILE_FORMATS)
+const BookParams = z.object({ bookId: z.string() })
+const FileParams = z.object({ fileId: z.string() })
 
 const BookSummary = z.object({
   id: z.string(),
@@ -18,9 +24,53 @@ const BookSummary = z.object({
   seriesName: z.string().nullable(),
   seriesIndex: z.number().nullable(),
   coverUrl: z.string().nullable(),
-  formats: z.array(z.enum(FILE_FORMATS)),
+  formats: z.array(Format),
   owned: z.boolean(),
   addedAt: z.number(),
+})
+
+const BookFile = z.object({
+  id: z.string(),
+  format: Format,
+  originalName: z.string(),
+  size: z.number(),
+  readable: z.boolean(),
+  url: z.string(),
+  addedAt: z.number(),
+})
+
+const BookDetail = BookSummary.omit({ formats: true }).extend({
+  description: z.string().nullable(),
+  language: z.string().nullable(),
+  publisher: z.string().nullable(),
+  publishedDate: z.string().nullable(),
+  isbn: z.string().nullable(),
+  tags: z.array(z.string()),
+  ownerName: z.string(),
+  files: z.array(BookFile),
+  updatedAt: z.number(),
+})
+
+/** Blank strings clear a field; `undefined` leaves it alone. */
+const OptionalText = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v?.trim() || null))
+
+const BookPatch = z.object({
+  title: z.string().trim().min(1).max(500).optional(),
+  authors: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+  description: OptionalText(20_000),
+  language: OptionalText(35),
+  publisher: OptionalText(200),
+  publishedDate: OptionalText(40),
+  isbn: OptionalText(40),
+  seriesName: OptionalText(300),
+  seriesIndex: z.number().finite().nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
 })
 
 const IngestResultBody = z.object({
@@ -30,11 +80,20 @@ const IngestResultBody = z.object({
   message: z.string().optional(),
 })
 
+const CONTENT_TYPES: Record<FileFormat, string> = {
+  epub: 'application/epub+zip',
+  mobi: 'application/x-mobipocket-ebook',
+  azw3: 'application/vnd.amazon.ebook',
+  pdf: 'application/pdf',
+  cbz: 'application/vnd.comicbook+zip',
+  other: 'application/octet-stream',
+}
+
 export interface BookRouteDeps {
   db: Db
   blobs: BlobStore
   ingest: Ingest
-  coversDir: string
+  library: Library
   maxUploadBytes: number
 }
 
@@ -42,9 +101,46 @@ export function bookRoutes({
   db,
   blobs,
   ingest,
-  coversDir,
+  library,
   maxUploadBytes,
 }: BookRouteDeps): FastifyPluginAsyncZod {
+  const coverUrl = (b: BookRow) => (b.coverExt ? `/api/books/${b.id}/cover?v=${b.updatedAt}` : null)
+
+  function detail(profileId: string, book: BookRow): z.infer<typeof BookDetail> {
+    const owner = db
+      .select({ name: profiles.name })
+      .from(profiles)
+      .where(eq(profiles.id, book.ownerProfileId))
+      .get()
+    return {
+      id: book.id,
+      title: book.title,
+      authors: library.authorsOf([book.id]).get(book.id) ?? [],
+      seriesName: book.seriesName,
+      seriesIndex: book.seriesIndex,
+      coverUrl: coverUrl(book),
+      owned: book.ownerProfileId === profileId,
+      addedAt: book.addedAt,
+      description: book.description,
+      language: book.language,
+      publisher: book.publisher,
+      publishedDate: book.publishedDate,
+      isbn: book.isbn,
+      tags: library.tagsOf(book.id),
+      ownerName: owner?.name ?? '',
+      updatedAt: book.updatedAt,
+      files: library.filesOf([book.id]).map((f) => ({
+        id: f.id,
+        format: f.format as FileFormat,
+        originalName: f.originalName,
+        size: f.size,
+        readable: READABLE_FORMATS.has(f.format as FileFormat),
+        url: `/api/files/${f.id}`,
+        addedAt: f.addedAt,
+      })),
+    }
+  }
+
   return async (app) => {
     app.addHook('onRequest', requireProfile(db))
 
@@ -86,32 +182,21 @@ export function bookRoutes({
           .orderBy(desc(books.addedAt))
           .all()
         const ids = rows.map((b) => b.id)
-        const authors = ids.length
-          ? db
-              .select()
-              .from(bookAuthors)
-              .where(inArray(bookAuthors.bookId, ids))
-              .orderBy(asc(bookAuthors.position))
-              .all()
-          : []
-        const fileRows = ids.length
-          ? db
-              .select({ bookId: files.bookId, format: files.format })
-              .from(files)
-              .where(inArray(files.bookId, ids))
-              .all()
-          : []
+        const authors = library.authorsOf(ids)
+        const fileRows = library.filesOf(ids)
         return {
           books: rows.map((b) => ({
             id: b.id,
             title: b.title,
-            authors: authors.filter((a) => a.bookId === b.id).map((a) => a.name),
+            authors: authors.get(b.id) ?? [],
             seriesName: b.seriesName,
             seriesIndex: b.seriesIndex,
-            coverUrl: b.coverExt ? `/api/books/${b.id}/cover?v=${b.updatedAt}` : null,
+            coverUrl: coverUrl(b),
             formats: [
-              ...new Set(fileRows.filter((f) => f.bookId === b.id).map((f) => f.format)),
-            ] as (typeof FILE_FORMATS)[number][],
+              ...new Set(
+                fileRows.filter((f) => f.bookId === b.id).map((f) => f.format as FileFormat),
+              ),
+            ],
             owned: b.ownerProfileId === request.profile.id,
             addedAt: b.addedAt,
           })),
@@ -120,19 +205,148 @@ export function bookRoutes({
     )
 
     app.get(
-      '/api/books/:bookId/cover',
-      { schema: { operationId: 'getBookCover', params: z.object({ bookId: z.string() }) } },
-      async (request, reply) => {
-        const book = db
-          .select()
-          .from(books)
-          .where(
-            and(eq(books.id, request.params.bookId), eq(books.ownerProfileId, request.profile.id)),
+      '/api/books/:bookId',
+      {
+        schema: {
+          operationId: 'getBook',
+          params: BookParams,
+          response: { 200: BookDetail, 404: ErrorBody },
+        },
+      },
+      async (request) =>
+        detail(request.profile.id, library.visibleBook(request.profile.id, request.params.bookId)),
+    )
+
+    app.patch(
+      '/api/books/:bookId',
+      {
+        schema: {
+          operationId: 'updateBook',
+          params: BookParams,
+          body: BookPatch,
+          response: { 200: BookDetail, 400: ErrorBody, 403: ErrorBody, 404: ErrorBody },
+        },
+      },
+      async (request) => {
+        const book = library.ownedBook(request.profile.id, request.params.bookId)
+        const { authors, tags, title, isbn, ...fields } = request.body
+        let normalisedIsbn: string | null | undefined = isbn
+        if (isbn) {
+          normalisedIsbn = normaliseIsbn(isbn)
+          if (!normalisedIsbn)
+            throw new AppError(400, 'invalid_isbn', `"${isbn}" is not a valid ISBN`)
+        }
+        const nextTitle = title ?? book.title
+        db.transaction((tx) => {
+          if (authors) {
+            tx.delete(bookAuthors).where(eq(bookAuthors.bookId, book.id)).run()
+            authors.forEach((name, position) => {
+              tx.insert(bookAuthors).values({ bookId: book.id, position, name }).run()
+            })
+          }
+          if (tags) {
+            tx.delete(bookTags).where(eq(bookTags.bookId, book.id)).run()
+            for (const tag of new Set(tags))
+              tx.insert(bookTags).values({ bookId: book.id, tag }).run()
+          }
+          const firstAuthor =
+            authors?.[0] ??
+            tx
+              .select({ name: bookAuthors.name })
+              .from(bookAuthors)
+              .where(eq(bookAuthors.bookId, book.id))
+              .orderBy(bookAuthors.position)
+              .get()?.name
+          const defined = Object.fromEntries(
+            Object.entries(fields).filter(([, v]) => v !== undefined),
           )
-          .get()
-        if (!book?.coverExt) throw notFound('Cover')
+          tx.update(books)
+            .set({
+              ...defined,
+              ...(normalisedIsbn !== undefined && { isbn: normalisedIsbn }),
+              title: nextTitle,
+              sortTitle: sortTitle(nextTitle),
+              matchKey: matchKey(nextTitle, firstAuthor),
+              updatedAt: Date.now(),
+            })
+            .where(eq(books.id, book.id))
+            .run()
+        })
+        return detail(request.profile.id, library.visibleBook(request.profile.id, book.id))
+      },
+    )
+
+    app.delete(
+      '/api/books/:bookId',
+      {
+        schema: {
+          operationId: 'deleteBook',
+          params: BookParams,
+          response: { 204: z.null(), 403: ErrorBody, 404: ErrorBody },
+        },
+      },
+      async (request, reply) => {
+        const book = library.ownedBook(request.profile.id, request.params.bookId)
+        library.deleteBooks([book.id])
+        return reply.code(204).send(null)
+      },
+    )
+
+    app.get(
+      '/api/books/:bookId/cover',
+      { schema: { operationId: 'getBookCover', params: BookParams } },
+      async (request, reply) => {
+        const book = library.visibleBook(request.profile.id, request.params.bookId)
+        const cover = library.coverPath(book)
+        if (!cover) throw notFound('Cover')
         reply.header('Cache-Control', 'private, max-age=86400')
-        return reply.sendFile(`${book.id}.${book.coverExt}`, coversDir)
+        return reply.sendFile(path.basename(cover), library.coversDir)
+      },
+    )
+
+    // Range requests come from @fastify/send, so the reader can fetch parts of a File (ticket 04).
+    app.get(
+      '/api/files/:fileId',
+      {
+        schema: {
+          operationId: 'getFile',
+          params: FileParams,
+          querystring: z.object({ download: z.enum(['1']).optional() }),
+        },
+      },
+      async (request, reply) => {
+        const { file } = library.visibleFile(request.profile.id, request.params.fileId)
+        const disposition = request.query.download ? 'attachment' : 'inline'
+        reply.header(
+          'Content-Type',
+          CONTENT_TYPES[file.format as FileFormat] ?? CONTENT_TYPES.other,
+        )
+        reply.header(
+          'Content-Disposition',
+          `${disposition}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
+        )
+        // Bytes behind a File id never change, so the cache can keep them (ticket 05).
+        reply.header('Cache-Control', 'private, max-age=31536000, immutable')
+        const blob = blobs.pathFor(file.sha256)
+        return reply.sendFile(path.basename(blob), path.dirname(blob), {
+          cacheControl: false,
+          contentType: false,
+        })
+      },
+    )
+
+    app.delete(
+      '/api/files/:fileId',
+      {
+        schema: {
+          operationId: 'deleteFile',
+          params: FileParams,
+          response: { 204: z.null(), 403: ErrorBody, 404: ErrorBody, 409: ErrorBody },
+        },
+      },
+      async (request, reply) => {
+        library.removeFile(request.profile.id, request.params.fileId)
+        return reply.code(204).send(null)
       },
     )
   }

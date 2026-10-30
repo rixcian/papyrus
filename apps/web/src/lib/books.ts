@@ -1,7 +1,13 @@
-import { useQuery } from '@tanstack/react-query'
-import { api, unwrap } from '@/api/client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type ApiSchemas, api, unwrap } from '@/api/client'
+import type { operations } from '@/api/schema'
 
-export type BookSummary = NonNullable<Awaited<ReturnType<typeof listBooks>>>['books'][number]
+export type BookSummary = Awaited<ReturnType<typeof listBooks>>['books'][number]
+export type BookDetail = Awaited<ReturnType<typeof getBook>>
+export type BookFile = BookDetail['files'][number]
+export type BookPatch = NonNullable<
+  operations['updateBook']['requestBody']
+>['content']['application/json']
 
 export type IngestResult = {
   status: 'created' | 'attached' | 'duplicate' | 'failed'
@@ -10,14 +16,60 @@ export type IngestResult = {
   message?: string
 }
 
-export const bookKeys = { list: ['books', 'list'] as const }
+export const bookKeys = {
+  all: ['books'] as const,
+  list: ['books', 'list'] as const,
+  detail: (id: string) => ['books', 'detail', id] as const,
+}
 
 function listBooks() {
   return unwrap(api.GET('/api/books'))
 }
 
+function getBook(bookId: string) {
+  return unwrap(api.GET('/api/books/{bookId}', { params: { path: { bookId } } }))
+}
+
+function updateBook(bookId: string, body: BookPatch) {
+  return unwrap(api.PATCH('/api/books/{bookId}', { params: { path: { bookId } }, body }))
+}
+
 export function useBooks() {
   return useQuery({ queryKey: bookKeys.list, queryFn: listBooks })
+}
+
+export function useBook(bookId: string) {
+  return useQuery({ queryKey: bookKeys.detail(bookId), queryFn: () => getBook(bookId) })
+}
+
+function useBookMutation<A, R>(fn: (args: A) => Promise<R>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: bookKeys.all }),
+  })
+}
+
+export function useUpdateBook(bookId: string) {
+  return useBookMutation((body: BookPatch) => updateBook(bookId, body))
+}
+
+export function useDeleteBook() {
+  return useBookMutation((bookId: string) =>
+    unwrap(api.DELETE('/api/books/{bookId}', { params: { path: { bookId } } })),
+  )
+}
+
+export function useDeleteFile() {
+  return useBookMutation((fileId: string) =>
+    unwrap(api.DELETE('/api/files/{fileId}', { params: { path: { fileId } } })),
+  )
+}
+
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 /** XHR rather than fetch, for upload progress. One file per request (ticket 09). */
@@ -41,3 +93,5 @@ export function uploadFile(
     xhr.send(form)
   })
 }
+
+export type { ApiSchemas }

@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from '@fastify/type-provider-zod'
 import { normaliseProfileName, PROFILE_COLOURS, PROFILE_NAME_MAX } from '@papyrus/shared'
 import { asc, eq } from 'drizzle-orm'
 import { z } from 'zod'
+import type { Library } from '../books/library.ts'
 import type { Db } from '../db/client.ts'
 import { type ProfileRow, profiles } from '../db/schema.ts'
 import { AppError } from '../errors.ts'
@@ -34,7 +35,7 @@ function assertNameFree(db: Db, name: string, exceptId?: string) {
     throw new AppError(409, 'name_taken', `A Profile called "${clash.name}" already exists`)
 }
 
-export function profileRoutes(db: Db): FastifyPluginAsyncZod {
+export function profileRoutes(db: Db, library: Library): FastifyPluginAsyncZod {
   return async (app) => {
     app.get(
       '/api/profiles',
@@ -146,6 +147,8 @@ export function profileRoutes(db: Db): FastifyPluginAsyncZod {
         async (request, reply) => {
           if (nameKey(normaliseProfileName(request.body.confirmName)) !== request.profile.nameKey)
             throw new AppError(400, 'confirmation_mismatch', 'Type the Profile name to confirm')
+          // Book deletion first, so blobs and covers on disk go with the rows.
+          library.deleteBooks(library.booksOwnedBy(request.profile.id))
           db.delete(profiles).where(eq(profiles.id, request.profile.id)).run()
           clearActiveProfile(reply)
           return reply.code(204).send(null)
