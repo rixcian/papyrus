@@ -2710,6 +2710,36 @@
         }
       }
     },
+    "/api/files/{fileId}/tracks/{position}": {
+      "get": {
+        "operationId": "getTrack",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "fileId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "position",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/files/{fileId}/info": {
       "get": {
         "operationId": "getFileInfo",
@@ -2749,9 +2779,80 @@
                     },
                     "url": {
                       "type": "string"
+                    },
+                    "duration": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "tracks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "position": {
+                            "type": "number"
+                          },
+                          "title": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "duration": {
+                            "type": "number"
+                          },
+                          "mime": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["position", "title", "duration", "mime", "size", "url"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "chapters": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "start": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["title", "start"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "coverUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "authors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
-                  "required": ["id", "bookId", "title", "format", "readable", "url"],
+                  "required": [
+                    "id",
+                    "bookId",
+                    "title",
+                    "format",
+                    "readable",
+                    "url",
+                    "duration",
+                    "tracks",
+                    "chapters",
+                    "coverUrl",
+                    "authors"
+                  ],
                   "additionalProperties": false
                 }
               }

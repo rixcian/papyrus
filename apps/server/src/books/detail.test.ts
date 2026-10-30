@@ -135,13 +135,16 @@ describe('Files', () => {
     const { alice, bookId } = await setup()
     const [file] = (await alice.request({ url: `/api/books/${bookId}` })).json().files
     const info = await alice.request({ url: `/api/files/${file.id}/info` })
-    expect(info.json()).toEqual({
+    expect(info.json()).toMatchObject({
       id: file.id,
       bookId,
       title: 'Dune',
       format: 'epub',
       readable: true,
       url: file.url,
+      tracks: [],
+      chapters: [],
+      duration: null,
     })
   })
 

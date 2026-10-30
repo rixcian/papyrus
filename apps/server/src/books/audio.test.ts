@@ -238,3 +238,123 @@ describe('uploading audio', () => {
     expect(split.files[0]).toMatchObject({ id: audio.id, trackCount: 3 })
   })
 })
+
+describe('serving audio', () => {
+  async function quietShore() {
+    const device = await setup()
+    const [result] = (await uploadAudio(device, QUIET_SHORE)).json().results
+    const file = (await detail(device, result.bookId)).files[0]
+    return { device, file }
+  }
+
+  it('lists Tracks and Chapters in the File info', async () => {
+    const { device, file } = await quietShore()
+    const info = (await device.request({ url: `/api/files/${file.id}/info` })).json()
+    expect(info).toMatchObject({ title: 'The Quiet Shore', authors: ['Ada Lindqvist'] })
+    expect(info.tracks.map((t: { title: string; url: string }) => [t.title, t.url])).toEqual([
+      ['Arrival', `/api/files/${file.id}/tracks/0`],
+      ['The Lighthouse', `/api/files/${file.id}/tracks/1`],
+      ['Departure', `/api/files/${file.id}/tracks/2`],
+    ])
+    expect(info.chapters[1].start).toBeCloseTo(4.08, 1)
+    expect(info.coverUrl).toBeTruthy()
+  })
+
+  it('streams a Track with range requests', async () => {
+    const { device, file } = await quietShore()
+    const bytes = audioFixture('02-the-lighthouse.mp3')
+    const whole = await device.request({ url: `/api/files/${file.id}/tracks/1` })
+    expect(whole.headers['content-type']).toBe('audio/mpeg')
+    expect(whole.headers['cache-control']).toContain('immutable')
+    expect(whole.rawPayload.equals(bytes)).toBe(true)
+
+    const part = await device.request({
+      url: `/api/files/${file.id}/tracks/1`,
+      headers: { range: 'bytes=100-199' },
+    })
+    expect(part.statusCode).toBe(206)
+    expect(part.rawPayload.equals(bytes.subarray(100, 200))).toBe(true)
+
+    expect((await device.request({ url: `/api/files/${file.id}/tracks/3` })).statusCode).toBe(404)
+  })
+
+  it('downloads several Tracks as a stored zip', async () => {
+    const { device, file } = await quietShore()
+    const res = await device.request({ url: `/api/files/${file.id}?download=1` })
+    expect(res.headers['content-type']).toBe('application/zip')
+    expect(res.headers['content-disposition']).toContain('The%20Quiet%20Shore.zip')
+    const entries = await readZip(res.rawPayload)
+    expect(entries.map((e) => e.name)).toEqual(QUIET_SHORE)
+    for (const e of entries) {
+      expect(e.compressionMethod).toBe(0)
+      expect(e.data.equals(audioFixture(e.name))).toBe(true)
+    }
+  })
+
+  it('downloads a single recording as it is', async () => {
+    const device = await setup()
+    const [result] = (await uploadAudio(device, ['northern-lights.m4b'])).json().results
+    const file = (await detail(device, result.bookId)).files[0]
+    const res = await device.request({ url: `/api/files/${file.id}?download=1` })
+    expect(res.headers['content-type']).toBe('audio/mp4')
+    expect(res.headers['content-disposition']).toContain('northern-lights.m4b')
+    expect(res.rawPayload.equals(audioFixture('northern-lights.m4b'))).toBe(true)
+  })
+
+  it('merges a Book with audio into another and keeps the Tracks playable', async () => {
+    const device = await setup()
+    const [shore] = (await uploadAudio(device, QUIET_SHORE)).json().results
+    const target = (
+      await device.request({
+        method: 'POST',
+        url: '/api/uploads',
+        ...multipart(
+          'other.epub',
+          await buildEpub({ metadata: '<dc:title>Other</dc:title><dc:creator>X</dc:creator>' }),
+        ),
+      })
+    ).json()
+    const res = await device.request({
+      method: 'POST',
+      url: `/api/books/${shore.bookId}/merge`,
+      payload: { targetId: target.bookId },
+    })
+    expect(res.statusCode).toBe(200)
+    const audio = (await detail(device, target.bookId)).files.find(
+      (f: { kind: string }) => f.kind === 'audio',
+    )
+    expect(audio.trackCount).toBe(3)
+    const track = await device.request({ url: `/api/files/${audio.id}/tracks/0` })
+    expect(track.rawPayload.equals(audioFixture('01-arrival.mp3'))).toBe(true)
+  })
+})
+
+/** Reads entries of a zip with yauzl, as a check on what the server sent. */
+async function readZip(buffer: Buffer) {
+  const yauzl = await import('yauzl')
+  const zip = await new Promise<import('yauzl').ZipFile>((resolve, reject) =>
+    yauzl.fromBuffer(buffer, { lazyEntries: true }, (e, z) => (e ? reject(e) : resolve(z))),
+  )
+  const entries: { name: string; compressionMethod: number; data: Buffer }[] = []
+  await new Promise<void>((resolve, reject) => {
+    zip.on('entry', (entry: import('yauzl').Entry) => {
+      zip.openReadStream(entry, (err, stream) => {
+        if (err) return reject(err)
+        const chunks: Buffer[] = []
+        stream.on('data', (c: Buffer) => chunks.push(c))
+        stream.on('end', () => {
+          entries.push({
+            name: entry.fileName,
+            compressionMethod: entry.compressionMethod,
+            data: Buffer.concat(chunks),
+          })
+          zip.readEntry()
+        })
+      })
+    })
+    zip.on('end', resolve)
+    zip.on('error', reject)
+    zip.readEntry()
+  })
+  return entries
+}

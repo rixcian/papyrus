@@ -260,6 +260,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/{fileId}/tracks/{position}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTrack"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files/{fileId}/info": {
         parameters: {
             query?: never;
@@ -1680,6 +1696,27 @@ export interface operations {
             };
         };
     };
+    getTrack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fileId: string;
+                position: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getFileInfo: {
         parameters: {
             query?: never;
@@ -1705,6 +1742,21 @@ export interface operations {
                         format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other";
                         readable: boolean;
                         url: string;
+                        duration: number | null;
+                        tracks: {
+                            position: number;
+                            title: string | null;
+                            duration: number;
+                            mime: string;
+                            size: number;
+                            url: string;
+                        }[];
+                        chapters: {
+                            title: string;
+                            start: number;
+                        }[];
+                        coverUrl: string | null;
+                        authors: string[];
                     };
                 };
             };

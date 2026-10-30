@@ -1,9 +1,18 @@
 import path from 'node:path'
 import type { FastifyPluginAsyncZod } from '@fastify/type-provider-zod'
 import { eq, inArray } from 'drizzle-orm'
+import type { FastifyReply } from 'fastify'
+import { ZipFile } from 'yazl'
 import { z } from 'zod'
 import type { Db } from '../db/client.ts'
-import { type BookRow, bookAuthors, books, bookTags, profiles } from '../db/schema.ts'
+import {
+  type BookRow,
+  bookAuthors,
+  books,
+  bookTags,
+  type FileTrackRow,
+  profiles,
+} from '../db/schema.ts'
 import { AppError, notFound } from '../errors.ts'
 import { requireProfile } from '../session.ts'
 import type { ShelfService } from '../shelves/service.ts'
@@ -202,6 +211,37 @@ export function bookRoutes({
         addedAt: f.addedAt,
       })),
     }
+  }
+
+  // Bytes behind a File id never change, so the cache can keep them (ticket 05).
+  function sendBlob(reply: FastifyReply, sha256: string) {
+    reply.header('Cache-Control', 'private, max-age=31536000, immutable')
+    const blob = blobs.pathFor(sha256)
+    return reply.sendFile(path.basename(blob), path.dirname(blob), {
+      cacheControl: false,
+      contentType: false,
+    })
+  }
+
+  /** Several Tracks download as one stored zip, built while it streams; nothing is kept. */
+  function sendZip(reply: FastifyReply, name: string, tracks: FileTrackRow[]) {
+    const zip = new ZipFile()
+    const used = new Set<string>()
+    for (const t of tracks) {
+      const base = t.originalName.replace(/[/\\]/g, '_')
+      let entry = base
+      for (let n = 2; used.has(entry.toLowerCase()); n++) entry = `${n} ${base}`
+      used.add(entry.toLowerCase())
+      zip.addFile(blobs.pathFor(t.sha256), entry, { compress: false })
+    }
+    zip.end()
+    reply.header('Content-Type', 'application/zip')
+    reply.header(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(name.replace(/[/\\]/g, '_'))}`,
+    )
+    reply.header('Cache-Control', 'private, no-store')
+    return reply.send(zip.outputStream)
   }
 
   return async (app) => {
@@ -553,23 +593,38 @@ export function bookRoutes({
         },
       },
       async (request, reply) => {
-        const { file } = library.visibleFile(request.profile.id, request.params.fileId)
+        const { file, book } = library.visibleFile(request.profile.id, request.params.fileId)
         const disposition = request.query.download ? 'attachment' : 'inline'
+        const tracks = file.format === 'audio' ? library.tracksOf(file.id) : []
+        if (tracks.length > 1) return sendZip(reply, `${book.title}.zip`, tracks)
+        const track = tracks[0]
         reply.header(
           'Content-Type',
-          CONTENT_TYPES[file.format as FileFormat] ?? CONTENT_TYPES.other,
+          track?.mime ?? CONTENT_TYPES[file.format as FileFormat] ?? CONTENT_TYPES.other,
         )
         reply.header(
           'Content-Disposition',
-          `${disposition}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
+          `${disposition}; filename*=UTF-8''${encodeURIComponent(track?.originalName ?? file.originalName)}`,
         )
-        // Bytes behind a File id never change, so the cache can keep them (ticket 05).
-        reply.header('Cache-Control', 'private, max-age=31536000, immutable')
-        const blob = blobs.pathFor(file.sha256)
-        return reply.sendFile(path.basename(blob), path.dirname(blob), {
-          cacheControl: false,
-          contentType: false,
-        })
+        return sendBlob(reply, track?.sha256 ?? file.sha256)
+      },
+    )
+
+    // One recording of an Audio File, for the player; seeking uses range requests.
+    app.get(
+      '/api/files/:fileId/tracks/:position',
+      {
+        schema: {
+          operationId: 'getTrack',
+          params: FileParams.extend({ position: z.coerce.number().int().min(0) }),
+        },
+      },
+      async (request, reply) => {
+        const { file } = library.visibleFile(request.profile.id, request.params.fileId)
+        const track = library.tracksOf(file.id)[request.params.position]
+        if (!track) throw notFound('Track')
+        reply.header('Content-Type', track.mime)
+        return sendBlob(reply, track.sha256)
       },
     )
 
@@ -587,6 +642,22 @@ export function bookRoutes({
               format: Format,
               readable: z.boolean(),
               url: z.string(),
+              /** The rest are for Audio Files only. */
+              duration: z.number().nullable(),
+              tracks: z.array(
+                z.object({
+                  position: z.number(),
+                  title: z.string().nullable(),
+                  duration: z.number(),
+                  mime: z.string(),
+                  size: z.number(),
+                  url: z.string(),
+                }),
+              ),
+              /** `start` is seconds from the start of the whole Audio File. */
+              chapters: z.array(z.object({ title: z.string(), start: z.number() })),
+              coverUrl: z.string().nullable(),
+              authors: z.array(z.string()),
             }),
             404: ErrorBody,
           },
@@ -601,6 +672,18 @@ export function bookRoutes({
           format: file.format as FileFormat,
           readable: READABLE_FORMATS.has(file.format as FileFormat),
           url: `/api/files/${file.id}`,
+          duration: file.duration,
+          tracks: library.tracksOf(file.id).map((t) => ({
+            position: t.position,
+            title: t.title,
+            duration: t.duration,
+            mime: t.mime,
+            size: t.size,
+            url: `/api/files/${file.id}/tracks/${t.position}`,
+          })),
+          chapters: library.chaptersOf(file.id),
+          coverUrl: coverUrl(book),
+          authors: library.authorsOf([book.id]).get(book.id) ?? [],
         }
       },
     )
