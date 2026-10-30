@@ -28,12 +28,18 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [What is coss ui and how does it fit a Vite + React + Tailwind app?](issues/02-coss-ui.md): adopt it. It is a shadcn-style copy-in registry on Base UI that needs Tailwind v4 and React 19 and works in Vite. Add react-virtual for the library grid; the reader view sits outside it.
+- [PWA offline: service worker tooling, where book files are stored on the device, iOS storage limits](issues/05-pwa-offline.md): vite-plugin-pwa (injectManifest, prompt-for-update). Book Files go in a Cache API cache with an IndexedDB index. The app keeps its own IndexedDB outbox for sync, since Background Sync is Chromium-only. iOS users need to install to the Home Screen or Safari evicts data after 7 days.
+- [Which reader engine renders epub and mobi/azw3 in the browser?](issues/01-reader-engine.md): foliate-js. It is the only option that reads epub and mobi/azw3 natively, gives CFI locators, an annotation overlay and search, and opens Blobs offline. Pin a commit, since its API is unstable, and write our own React wrapper.
+- [Data layer and API contract: SQLite driver, ORM/migrations, typed Fastify↔React contract](issues/04-data-layer-and-api.md): better-sqlite3 (prebuilt binaries, FTS5 included) with Drizzle and drizzle-kit migrations that run on start. Fastify 5 uses a Zod type provider and generates OpenAPI; the client uses openapi-fetch + TanStack Query. Book Files stream through `@fastify/static` with range support.
+- [How do we pull metadata and covers out of epub/mobi/azw3 on a Node server?](issues/03-metadata-extraction.md): an in-house extractor. epub uses yauzl + fast-xml-parser on the OPF; mobi/azw3 parses PDB/EXTH, modelled on foliate-js mobi.js. Series reads EPUB 3 first, then Calibre metas, stored as REAL. MOBI carries no series, so it must be editable. Calibre is rejected (about 650 MiB).
+
 ## Not yet specified
 
 - **Online metadata lookup** (Open Library / Google Books) for covers and descriptions: in scope, but its shape depends on the data model and import pipeline.
 - **Exporting highlights** (e.g. Markdown per Book).
 - **Backups**: what to back up (DB + books volume), and whether the app helps (e.g. a SQLite snapshot endpoint).
-- **Search implementation**: metadata search (SQLite FTS5?) and how in-book search works given the chosen reader engine.
+- **Search implementation**: metadata search (SQLite FTS5?) and how in-book search works, given that foliate-js's search module is reportedly very slow.
 - **Testing strategy** across server, web, and reader.
 - **Assembling the v1 spec**: the final ticket, once the route is clear.
 
