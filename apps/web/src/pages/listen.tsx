@@ -241,7 +241,12 @@ function FullPlayer({ item }: { item: PlayerItem }) {
         <BookCover
           title={item.title}
           coverUrl={item.coverUrl}
-          className="mx-auto aspect-square w-[min(17rem,65vw,38dvh)] shadow-xl [&_img]:object-contain"
+          className={cn(
+            'mx-auto aspect-square w-[min(17rem,65vw,38dvh)] shadow-xl',
+            // A cover keeps its own shape: square for audiobooks, tall for a Book's ebook.
+            item.coverUrl &&
+              'overflow-visible bg-transparent shadow-none [&_img]:mx-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:object-contain [&_img]:shadow-xl',
+          )}
         />
         <div className="text-center">
           <h1 className="font-semibold text-xl tracking-tight">{item.title}</h1>
