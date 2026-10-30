@@ -20,10 +20,12 @@ function announceProfileChange() {
   channel?.postMessage('changed')
 }
 
-export function useProfiles() {
+/** `fresh` refetches on mount, for screens that must list Profiles added on other devices. */
+export function useProfiles({ fresh = false } = {}) {
   return useQuery({
     queryKey: sessionKeys.profiles,
     queryFn: () => unwrap(api.GET('/api/profiles')).then((r) => r.profiles as Profile[]),
+    ...(fresh && { refetchOnMount: 'always' as const }),
   })
 }
 

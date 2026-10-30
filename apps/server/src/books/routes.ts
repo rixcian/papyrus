@@ -10,9 +10,9 @@ import { READ_STATUSES, type SyncService } from '../sync/service.ts'
 import type { BlobStore } from './blobs.ts'
 import { FILE_FORMATS, type FileFormat, READABLE_FORMATS } from './formats.ts'
 import type { Ingest } from './ingest.ts'
-import type { Library } from './library.ts'
+import { type Library, SHARE_MODES } from './library.ts'
 import { matchKey, normaliseIsbn, sortTitle } from './metadata.ts'
-import { BOOK_SORTS, BookSearch } from './search.ts'
+import { BOOK_SCOPES, BOOK_SORTS, BookSearch } from './search.ts'
 
 const ErrorBody = z.object({ error: z.string(), message: z.string() })
 const Format = z.enum(FILE_FORMATS)
@@ -28,10 +28,18 @@ const BookSummary = z.object({
   coverUrl: z.string().nullable(),
   formats: z.array(Format),
   owned: z.boolean(),
+  /** The Owning Profile's name, for a Book Shared with this Profile; null for its own. */
+  sharedBy: z.string().nullable(),
+  /** When it was added, or for a Shared Book, when it was Shared with this Profile. */
   addedAt: z.number(),
   readStatus: z.enum(READ_STATUSES),
   /** The File read most recently and how far into it, for resuming and "Continue reading". */
   lastRead: z.object({ fileId: z.string(), fraction: z.number(), at: z.number() }).nullable(),
+})
+
+const ShareBody = z.object({
+  mode: z.enum(SHARE_MODES),
+  profiles: z.array(z.object({ id: z.string(), name: z.string() })),
 })
 
 const Facet = z.object({ name: z.string(), count: z.number() })
@@ -55,6 +63,9 @@ const BookDetail = BookSummary.omit({ formats: true }).extend({
   isbn: z.string().nullable(),
   tags: z.array(z.string()),
   ownerName: z.string(),
+  hidden: z.boolean(),
+  /** Who the Book is Shared with; only the Owning Profile sees this (ticket 06). */
+  share: ShareBody.nullable(),
   files: z.array(BookFile),
   updatedAt: z.number(),
 })
@@ -144,7 +155,10 @@ export function bookRoutes({
       seriesIndex: book.seriesIndex,
       coverUrl: coverUrl(book),
       owned: book.ownerProfileId === profileId,
-      addedAt: book.addedAt,
+      sharedBy: book.ownerProfileId === profileId ? null : (owner?.name ?? ''),
+      addedAt: library.addedAt(profileId, book.id) ?? book.addedAt,
+      hidden: library.isHidden(profileId, book.id),
+      share: book.ownerProfileId === profileId ? library.shareOf(book) : null,
       description: book.description,
       language: book.language,
       publisher: book.publisher,
@@ -204,6 +218,9 @@ export function bookRoutes({
             series: z.string().optional(),
             tag: z.string().optional(),
             sort: z.enum(BOOK_SORTS).optional(),
+            scope: z.enum(BOOK_SCOPES).optional(),
+            /** `true` lists the Shared Books this Profile has hidden instead. */
+            hidden: z.stringbool().optional(),
             /** Opaque; pass back `nextCursor` for the next page. */
             cursor: z.string().regex(/^\d+$/).optional(),
             limit: z.coerce.number().int().min(1).max(200).default(60),
@@ -220,7 +237,13 @@ export function bookRoutes({
       async (request) => {
         const { cursor, limit, ...filters } = request.query
         const offset = cursor ? Number(cursor) : 0
-        const { ids, total } = search.list(request.profile.id, { ...filters, limit, offset })
+        const { rows: found, total } = search.list(request.profile.id, {
+          ...filters,
+          limit,
+          offset,
+        })
+        const ids = found.map((r) => r.id)
+        const addedAt = new Map(found.map((r) => [r.id, r.addedAt]))
         const byId = new Map(
           (ids.length ? db.select().from(books).where(inArray(books.id, ids)).all() : []).map(
             (b) => [b.id, b],
@@ -230,6 +253,7 @@ export function bookRoutes({
         const authors = library.authorsOf(ids)
         const fileRows = library.filesOf(ids)
         const stateOf = readingState(request.profile.id, ids)
+        const owners = library.profileNames(rows.map((b) => b.ownerProfileId))
         const next = offset + ids.length
         return {
           books: rows.map((b) => ({
@@ -245,7 +269,9 @@ export function bookRoutes({
               ),
             ],
             owned: b.ownerProfileId === request.profile.id,
-            addedAt: b.addedAt,
+            sharedBy:
+              b.ownerProfileId === request.profile.id ? null : (owners.get(b.ownerProfileId) ?? ''),
+            addedAt: addedAt.get(b.id) ?? b.addedAt,
             ...stateOf(b.id),
           })),
           total,
@@ -264,6 +290,9 @@ export function bookRoutes({
               authors: z.array(Facet),
               series: z.array(Facet),
               tags: z.array(Facet),
+              /** Books Shared with this Profile in its library, and Books it has hidden. */
+              shared: z.number(),
+              hidden: z.number(),
             }),
           },
         },
@@ -340,6 +369,45 @@ export function bookRoutes({
             .run()
         })
         return detail(request.profile.id, library.visibleBook(request.profile.id, book.id))
+      },
+    )
+
+    app.put(
+      '/api/books/:bookId/share',
+      {
+        schema: {
+          operationId: 'shareBook',
+          params: BookParams,
+          body: z.object({
+            mode: z.enum(SHARE_MODES),
+            /** The named Recipients, for `named`; ignored otherwise. */
+            profileIds: z.array(z.string()).max(1000).default([]),
+          }),
+          response: { 200: ShareBody, 400: ErrorBody, 403: ErrorBody, 404: ErrorBody },
+        },
+      },
+      async (request) =>
+        library.setShare(
+          request.profile.id,
+          request.params.bookId,
+          request.body.mode,
+          request.body.profileIds,
+        ),
+    )
+
+    app.put(
+      '/api/books/:bookId/hidden',
+      {
+        schema: {
+          operationId: 'setBookHidden',
+          params: BookParams,
+          body: z.object({ hidden: z.boolean() }),
+          response: { 204: z.null(), 404: ErrorBody, 409: ErrorBody },
+        },
+      },
+      async (request, reply) => {
+        library.setHidden(request.profile.id, request.params.bookId, request.body.hidden)
+        return reply.code(204).send(null)
       },
     )
 

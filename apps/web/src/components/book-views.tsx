@@ -176,7 +176,9 @@ function BookRow({ book }: { book: BookSummary }) {
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium text-sm">{book.title}</div>
           <div className="truncate text-muted-foreground text-xs">
-            {[book.authors.join(', '), series].filter(Boolean).join(' · ')}
+            {[book.authors.join(', '), series, book.sharedBy && `Shared by ${book.sharedBy}`]
+              .filter(Boolean)
+              .join(' · ')}
           </div>
         </div>
         <div className="shrink-0 text-muted-foreground text-xs tabular-nums">

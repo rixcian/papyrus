@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { BookCover } from '@/components/book-cover'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditBookDialog } from '@/components/edit-book-dialog'
+import { describeShare, ShareDialog } from '@/components/share-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +13,7 @@ import {
   useBook,
   useDeleteBook,
   useDeleteFile,
+  useSetHidden,
   useSetReadStatus,
 } from '@/lib/books'
 import { useSession } from '@/lib/session'
@@ -39,6 +41,8 @@ function BookView({ book }: { book: BookDetail }) {
   const deleteBook = useDeleteBook()
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  const setHidden = useSetHidden(book.id)
 
   const lastRead =
     book.lastRead && book.files.find((f) => f.id === book.lastRead?.fileId && f.readable)
@@ -65,7 +69,13 @@ function BookView({ book }: { book: BookDetail }) {
           </p>
         )}
         {!book.owned && (
-          <p className="mt-1 text-muted-foreground text-sm">Shared by {book.ownerName}</p>
+          <p className="mt-1 text-muted-foreground text-sm">
+            Shared by {book.sharedBy}
+            {book.hidden && ' · Hidden from your library'}
+          </p>
+        )}
+        {book.share && (
+          <p className="mt-1 text-muted-foreground text-sm">{describeShare(book.share)}</p>
         )}
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -87,10 +97,22 @@ function BookView({ book }: { book: BookDetail }) {
               <Button variant="outline" onClick={() => setEditing(true)}>
                 Edit metadata
               </Button>
+              <Button variant="outline" onClick={() => setSharing(true)}>
+                Share
+              </Button>
               <Button variant="destructive-outline" onClick={() => setDeleting(true)}>
                 Delete
               </Button>
             </>
+          )}
+          {!book.owned && (
+            <Button
+              variant="outline"
+              disabled={setHidden.isPending}
+              onClick={() => setHidden.mutate(!book.hidden)}
+            >
+              {book.hidden ? 'Unhide' : 'Hide from my library'}
+            </Button>
           )}
         </div>
 
@@ -129,6 +151,15 @@ function BookView({ book }: { book: BookDetail }) {
         </ul>
       </div>
 
+      {sharing && book.share && (
+        <ShareDialog
+          bookId={book.id}
+          title={book.title}
+          share={book.share}
+          open={sharing}
+          onOpenChange={setSharing}
+        />
+      )}
       {editing && <EditBookDialog book={book} open={editing} onOpenChange={setEditing} />}
       <ConfirmDialog
         open={deleting}

@@ -107,6 +107,30 @@ function useBookMutation<A, R>(fn: (args: A) => Promise<R>) {
   })
 }
 
+export type ShareState = NonNullable<BookDetail['share']>
+export type ShareMode = ShareState['mode']
+
+/** Only the Owning Profile can Share (ticket 06). */
+export function useShareBook(bookId: string) {
+  return useBookMutation(({ mode, profileIds }: { mode: ShareMode; profileIds: string[] }) =>
+    unwrap(
+      api.PUT('/api/books/{bookId}/share', {
+        params: { path: { bookId } },
+        body: { mode, profileIds },
+      }),
+    ),
+  )
+}
+
+/** A Recipient's "remove from my library", and undoing it. */
+export function useSetHidden(bookId: string) {
+  return useBookMutation((hidden: boolean) =>
+    unwrap(
+      api.PUT('/api/books/{bookId}/hidden', { params: { path: { bookId } }, body: { hidden } }),
+    ),
+  )
+}
+
 export function useUpdateBook(bookId: string) {
   return useBookMutation((body: BookPatch) => updateBook(bookId, body))
 }

@@ -1,10 +1,30 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, notInArray } from 'drizzle-orm'
 import type { Db } from '../db/client.ts'
-import { type BookRow, bookAuthors, books, bookTags, type FileRow, files } from '../db/schema.ts'
+import {
+  type BookRow,
+  bookAuthors,
+  bookShares,
+  books,
+  bookTags,
+  type FileRow,
+  files,
+  hiddenBooks,
+  profiles,
+} from '../db/schema.ts'
 import { AppError, notFound } from '../errors.ts'
 import type { BlobStore } from './blobs.ts'
+import { ADDED_SQL, HIDDEN_SQL, VISIBLE_SQL } from './visibility.ts'
+
+export const SHARE_MODES = ['none', 'everyone', 'named'] as const
+export type ShareMode = (typeof SHARE_MODES)[number]
+
+export interface ShareState {
+  mode: ShareMode
+  /** Named Recipients; empty unless `mode` is `named`. */
+  profiles: { id: string; name: string }[]
+}
 
 /**
  * Finding, reading and deleting Books on behalf of a Profile. Who may see a Book lives
@@ -21,11 +41,125 @@ export class Library {
     this.coversDir = coversDir
   }
 
-  /** A Book the Profile can see; 404 otherwise, so private Books don't leak their existence. */
+  /**
+   * A Book the Profile can see: its own or Shared with it, hidden or not. 404 otherwise, so
+   * private Books don't leak their existence.
+   */
   visibleBook(profileId: string, bookId: string): BookRow {
-    const book = this.db.select().from(books).where(eq(books.id, bookId)).get()
-    if (!book || book.ownerProfileId !== profileId) throw notFound('Book')
+    const visible = this.db.$client
+      .prepare(`SELECT 1 FROM books b WHERE b.id = @bookId AND ${VISIBLE_SQL}`)
+      .get({ bookId, profileId })
+    const book = visible
+      ? this.db.select().from(books).where(eq(books.id, bookId)).get()
+      : undefined
+    if (!book) throw notFound('Book')
     return book
+  }
+
+  /** When the Book was added as this Profile sees it: for a Shared Book, when it was Shared. */
+  addedAt(profileId: string, bookId: string): number | undefined {
+    const row = this.db.$client
+      .prepare(`SELECT ${ADDED_SQL} AS addedAt FROM books b WHERE b.id = @bookId`)
+      .get({ bookId, profileId }) as { addedAt: number | null } | undefined
+    return row?.addedAt ?? undefined
+  }
+
+  profileNames(ids: string[]): Map<string, string> {
+    if (!ids.length) return new Map()
+    const rows = this.db
+      .select({ id: profiles.id, name: profiles.name })
+      .from(profiles)
+      .where(inArray(profiles.id, [...new Set(ids)]))
+      .all()
+    return new Map(rows.map((r) => [r.id, r.name]))
+  }
+
+  isHidden(profileId: string, bookId: string): boolean {
+    return Boolean(
+      this.db.$client
+        .prepare(`SELECT 1 FROM books b WHERE b.id = @bookId AND ${HIDDEN_SQL}`)
+        .get({ bookId, profileId }),
+    )
+  }
+
+  /**
+   * "Remove from my library" for a Recipient. The marker outlives a revoke, so a re-Shared
+   * Book stays hidden until the Recipient unhides it (ticket 06).
+   */
+  setHidden(profileId: string, bookId: string, hidden: boolean): void {
+    const book = this.visibleBook(profileId, bookId)
+    if (book.ownerProfileId === profileId)
+      throw new AppError(409, 'own_book', 'Only Books Shared with you can be hidden')
+    if (hidden)
+      this.db
+        .insert(hiddenBooks)
+        .values({ profileId, bookId, hiddenAt: Date.now() })
+        .onConflictDoNothing()
+        .run()
+    else
+      this.db
+        .delete(hiddenBooks)
+        .where(and(eq(hiddenBooks.profileId, profileId), eq(hiddenBooks.bookId, bookId)))
+        .run()
+  }
+
+  shareOf(book: Pick<BookRow, 'id' | 'shareMode'>): ShareState {
+    const mode = book.shareMode as ShareMode
+    if (mode !== 'named') return { mode, profiles: [] }
+    const named = this.db
+      .select({ id: profiles.id, name: profiles.name })
+      .from(bookShares)
+      .innerJoin(profiles, eq(profiles.id, bookShares.profileId))
+      .where(eq(bookShares.bookId, book.id))
+      .orderBy(asc(profiles.nameKey))
+      .all()
+    // Every named Recipient may have deleted their Profile since.
+    return named.length ? { mode, profiles: named } : { mode: 'none', profiles: [] }
+  }
+
+  /**
+   * Sets who a Book is Shared with; only the Owning Profile may. Recipients who stay keep
+   * the time they were first Shared it, which is when it counts as added for them. Taking a
+   * Share away keeps the Recipient's reading state, hidden until it is Shared again.
+   */
+  setShare(profileId: string, bookId: string, mode: ShareMode, profileIds: string[]): ShareState {
+    const book = this.ownedBook(profileId, bookId)
+    const ids = [...new Set(profileIds)].filter((id) => id !== profileId)
+    const effective: ShareMode = mode === 'named' && ids.length === 0 ? 'none' : mode
+    if (effective === 'named') {
+      const known = this.db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(inArray(profiles.id, ids))
+        .all()
+      if (known.length !== ids.length)
+        throw new AppError(400, 'unknown_profile', 'One of those Profiles no longer exists')
+    }
+    const now = Date.now()
+    this.db.transaction((tx) => {
+      const keep = effective === 'named' ? ids : []
+      tx.delete(bookShares)
+        .where(
+          keep.length
+            ? and(eq(bookShares.bookId, book.id), notInArray(bookShares.profileId, keep))
+            : eq(bookShares.bookId, book.id),
+        )
+        .run()
+      for (const id of keep)
+        tx.insert(bookShares)
+          .values({ bookId: book.id, profileId: id, sharedAt: now })
+          .onConflictDoNothing()
+          .run()
+      tx.update(books)
+        .set({
+          shareMode: effective,
+          sharedAt:
+            effective === 'everyone' ? (book.shareMode === 'everyone' ? book.sharedAt : now) : null,
+        })
+        .where(eq(books.id, book.id))
+        .run()
+    })
+    return this.shareOf({ id: book.id, shareMode: effective })
   }
 
   /** A Book the Profile owns; only the Owning Profile may change it (GLOSSARY: Owning Profile). */

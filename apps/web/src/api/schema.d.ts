@@ -148,6 +148,38 @@ export interface paths {
         patch: operations["updateBook"];
         trace?: never;
     };
+    "/api/books/{bookId}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["shareBook"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/books/{bookId}/hidden": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["setBookHidden"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/books/{bookId}/cover": {
         parameters: {
             query?: never;
@@ -563,6 +595,8 @@ export interface operations {
                 series?: string;
                 tag?: string;
                 sort?: "added" | "title" | "author" | "series" | "recent" | "relevance";
+                scope?: "all" | "mine" | "shared";
+                hidden?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -588,6 +622,7 @@ export interface operations {
                             coverUrl: string | null;
                             formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
                             owned: boolean;
+                            sharedBy: string | null;
                             addedAt: number;
                             /** @enum {string} */
                             readStatus: "unread" | "reading" | "finished";
@@ -632,6 +667,8 @@ export interface operations {
                             name: string;
                             count: number;
                         }[];
+                        shared: number;
+                        hidden: number;
                     };
                 };
             };
@@ -662,6 +699,7 @@ export interface operations {
                         seriesIndex: number | null;
                         coverUrl: string | null;
                         owned: boolean;
+                        sharedBy: string | null;
                         addedAt: number;
                         /** @enum {string} */
                         readStatus: "unread" | "reading" | "finished";
@@ -678,6 +716,15 @@ export interface operations {
                         isbn: string | null;
                         tags: string[];
                         ownerName: string;
+                        hidden: boolean;
+                        share: {
+                            /** @enum {string} */
+                            mode: "none" | "everyone" | "named";
+                            profiles: {
+                                id: string;
+                                name: string;
+                            }[];
+                        } | null;
                         files: {
                             id: string;
                             /** @enum {string} */
@@ -792,6 +839,7 @@ export interface operations {
                         seriesIndex: number | null;
                         coverUrl: string | null;
                         owned: boolean;
+                        sharedBy: string | null;
                         addedAt: number;
                         /** @enum {string} */
                         readStatus: "unread" | "reading" | "finished";
@@ -808,6 +856,15 @@ export interface operations {
                         isbn: string | null;
                         tags: string[];
                         ownerName: string;
+                        hidden: boolean;
+                        share: {
+                            /** @enum {string} */
+                            mode: "none" | "everyone" | "named";
+                            profiles: {
+                                id: string;
+                                name: string;
+                            }[];
+                        } | null;
                         files: {
                             id: string;
                             /** @enum {string} */
@@ -848,6 +905,132 @@ export interface operations {
             };
             /** @description Default Response */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    shareBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    mode: "none" | "everyone" | "named";
+                    /** @default [] */
+                    profileIds?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        mode: "none" | "everyone" | "named";
+                        profiles: {
+                            id: string;
+                            name: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Default Response */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    setBookHidden: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    hidden: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Default Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null;
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

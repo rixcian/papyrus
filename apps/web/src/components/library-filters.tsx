@@ -25,8 +25,45 @@ export function LibraryFilters({
   onChange: (patch: Partial<LibraryQuery>) => void
 }) {
   const facets = useFacets()
+  const hidden = query.hidden === 'true'
+  const scopes = [
+    {
+      label: 'All',
+      selected: !query.scope && !hidden,
+      patch: { scope: undefined, hidden: undefined },
+    },
+    {
+      label: 'Mine',
+      selected: query.scope === 'mine',
+      patch: { scope: 'mine', hidden: undefined },
+    },
+    {
+      label: 'Shared with me',
+      selected: query.scope === 'shared',
+      patch: { scope: 'shared', hidden: undefined },
+    },
+    ...(facets.data?.hidden || hidden
+      ? [{ label: 'Hidden', selected: hidden, patch: { scope: undefined, hidden: 'true' } }]
+      : []),
+  ] as const satisfies { label: string; selected: boolean; patch: Partial<LibraryQuery> }[]
+  // Only worth offering once something is Shared with this Profile (ticket 06).
+  const showScopes = Boolean(facets.data?.shared || facets.data?.hidden || query.scope || hidden)
   return (
     <div className="flex flex-col gap-6">
+      {showScopes && (
+        <section>
+          <h2 className="mb-1.5 px-2 font-medium text-muted-foreground text-xs">Show</h2>
+          <ul>
+            {scopes.map((s) => (
+              <li key={s.label}>
+                <FilterButton selected={s.selected} onClick={() => onChange(s.patch)}>
+                  {s.label}
+                </FilterButton>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section>
         <h2 className="mb-1.5 px-2 font-medium text-muted-foreground text-xs">Read Status</h2>
         <ul>

@@ -12,7 +12,13 @@ import { Sheet, SheetHeader, SheetPanel, SheetPopup, SheetTitle } from '@/compon
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useUploads } from '@/components/uploads'
 import { useMediaQuery } from '@/hooks/use-media-query'
-import { type BookSort, type LibraryQuery, useBookList, useContinueReading } from '@/lib/books'
+import {
+  type BookSort,
+  type LibraryQuery,
+  useBookList,
+  useContinueReading,
+  useFacets,
+} from '@/lib/books'
 import type { ReadStatus } from '@/sync'
 
 const SORTS: { value: BookSort; label: string }[] = [
@@ -27,10 +33,12 @@ const STATUS_LABELS: Record<ReadStatus, string> = {
   reading: 'Reading',
   finished: 'Finished',
 }
+const SCOPE_LABELS = { all: 'All', mine: 'Mine', shared: 'Shared with me' } as const
 const LAYOUT_KEY = 'papyrus.libraryLayout'
 
 const isStatus = (v: string | null): v is ReadStatus =>
   v === 'unread' || v === 'reading' || v === 'finished'
+const isScope = (v: string | null): v is 'mine' | 'shared' => v === 'mine' || v === 'shared'
 const isSort = (v: string | null): v is BookSort => SORTS.some((s) => s.value === v)
 
 /** Search, filters and sort live in the URL, so they survive reloads and Back (ticket 06). */
@@ -39,6 +47,7 @@ function useLibraryQuery(): [LibraryQuery, (patch: Partial<LibraryQuery>) => voi
   const get = (key: string) => params.get(key) || undefined
   const status = params.get('status')
   const sort = params.get('sort')
+  const scope = params.get('scope')
   const query: LibraryQuery = {
     ...(get('q') && { q: get('q') }),
     ...(isStatus(status) && { status }),
@@ -46,6 +55,8 @@ function useLibraryQuery(): [LibraryQuery, (patch: Partial<LibraryQuery>) => voi
     ...(get('series') && { series: get('series') }),
     ...(get('tag') && { tag: get('tag') }),
     ...(isSort(sort) && { sort }),
+    ...(isScope(scope) && { scope }),
+    ...(params.get('hidden') === 'true' && { hidden: 'true' }),
   }
   const update = useCallback(
     (patch: Partial<LibraryQuery>) =>
@@ -85,6 +96,7 @@ export function LibraryPage() {
   const wide = useMediaQuery('lg')
   const list = useBookList(query)
   const continuing = useContinueReading()
+  const hiddenCount = useFacets().data?.hidden ?? 0
   const { addFiles } = useUploads()
   const input = useRef<HTMLInputElement>(null)
 
@@ -130,6 +142,11 @@ export function LibraryPage() {
             </p>
           </div>
           {picker}
+          {hiddenCount > 0 && (
+            <Button variant="link" onClick={() => update({ hidden: 'true' })}>
+              Show {hiddenCount} hidden {hiddenCount === 1 ? 'Book' : 'Books'}
+            </Button>
+          )}
         </div>
       </div>
     )
@@ -145,6 +162,8 @@ export function LibraryPage() {
   )
   const chips = (
     [
+      ['scope', query.scope && SCOPE_LABELS[query.scope]],
+      ['hidden', query.hidden && 'Hidden'],
       ['status', query.status && STATUS_LABELS[query.status]],
       ['author', query.author],
       ['series', query.series],

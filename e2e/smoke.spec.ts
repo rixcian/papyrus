@@ -140,6 +140,37 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await other.getByRole('link', { name: /^Continue · / }).click()
   await expect(other.locator('header').getByText('Chapter Three')).toBeVisible({ timeout: 15_000 })
 
+  // Sharing (ticket 06): Bob sees nothing of Alice's until she Shares a Book with him.
+  const bob = await (await browser.newContext()).newPage()
+  await bob.goto('/')
+  await bob.getByRole('button', { name: /Add Profile/ }).click()
+  await bob.getByLabel('Name').fill('Bob')
+  await bob.getByRole('button', { name: 'Create Profile' }).click()
+  await expect(bob.getByRole('heading', { name: 'Your library is empty' })).toBeVisible()
+
+  await page.getByRole('link', { name: /Sietch Tales/ }).click()
+  await page.getByRole('button', { name: 'Share' }).click()
+  await page.getByRole('radio', { name: 'Only these Profiles' }).click()
+  await page.getByRole('checkbox', { name: 'Bob' }).click()
+  await page.screenshot({ path: 'test-results/share-dialog.png' })
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Shared with Bob')).toBeVisible()
+
+  await bob.reload()
+  await bob.getByRole('link', { name: /Sietch Tales/ }).click()
+  await expect(bob.getByText('Shared by Alice')).toBeVisible()
+  await expect(bob.getByRole('button', { name: 'Edit metadata' })).toHaveCount(0)
+  await bob.getByRole('button', { name: 'Hide from my library' }).click()
+  await expect(bob.getByRole('button', { name: 'Unhide' })).toBeVisible()
+  await bob.goto('/')
+  await expect(bob.getByRole('heading', { name: 'Your library is empty' })).toBeVisible()
+  await bob.getByRole('button', { name: 'Show 1 hidden Book' }).click()
+  await bob.getByRole('link', { name: /Sietch Tales/ }).click()
+  await bob.getByRole('button', { name: 'Unhide' }).click()
+  await bob.goto('/')
+  await expect(bob.getByRole('link', { name: /Sietch Tales/ })).toBeVisible()
+  await bob.screenshot({ path: 'test-results/library-shared.png' })
+
   expect(errors).toEqual([])
 })
 

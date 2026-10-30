@@ -581,6 +581,23 @@
           {
             "schema": {
               "type": "string",
+              "enum": ["all", "mine", "shared"]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hidden",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
               "pattern": "^\\d+$"
             },
             "in": "query",
@@ -646,6 +663,10 @@
                           "owned": {
                             "type": "boolean"
                           },
+                          "sharedBy": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "addedAt": {
                             "type": "number"
                           },
@@ -680,6 +701,7 @@
                           "coverUrl",
                           "formats",
                           "owned",
+                          "sharedBy",
                           "addedAt",
                           "readStatus",
                           "lastRead"
@@ -762,9 +784,15 @@
                         "required": ["name", "count"],
                         "additionalProperties": false
                       }
+                    },
+                    "shared": {
+                      "type": "number"
+                    },
+                    "hidden": {
+                      "type": "number"
                     }
                   },
-                  "required": ["authors", "series", "tags"],
+                  "required": ["authors", "series", "tags", "shared", "hidden"],
                   "additionalProperties": false
                 }
               }
@@ -820,6 +848,10 @@
                     },
                     "owned": {
                       "type": "boolean"
+                    },
+                    "sharedBy": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "addedAt": {
                       "type": "number"
@@ -881,6 +913,37 @@
                     "ownerName": {
                       "type": "string"
                     },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": ["none", "everyone", "named"]
+                        },
+                        "profiles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "name"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["mode", "profiles"],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -933,6 +996,7 @@
                     "seriesIndex",
                     "coverUrl",
                     "owned",
+                    "sharedBy",
                     "addedAt",
                     "readStatus",
                     "lastRead",
@@ -944,6 +1008,8 @@
                     "isbn",
                     "tags",
                     "ownerName",
+                    "hidden",
+                    "share",
                     "files",
                     "updatedAt"
                   ],
@@ -1090,6 +1156,10 @@
                     "owned": {
                       "type": "boolean"
                     },
+                    "sharedBy": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "addedAt": {
                       "type": "number"
                     },
@@ -1150,6 +1220,37 @@
                     "ownerName": {
                       "type": "string"
                     },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": ["none", "everyone", "named"]
+                        },
+                        "profiles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["id", "name"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["mode", "profiles"],
+                      "additionalProperties": false
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -1202,6 +1303,7 @@
                     "seriesIndex",
                     "coverUrl",
                     "owned",
+                    "sharedBy",
                     "addedAt",
                     "readStatus",
                     "lastRead",
@@ -1213,6 +1315,8 @@
                     "isbn",
                     "tags",
                     "ownerName",
+                    "hidden",
+                    "share",
                     "files",
                     "updatedAt"
                   ],
@@ -1329,6 +1433,227 @@
             }
           },
           "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/{bookId}/share": {
+      "put": {
+        "operationId": "shareBook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": ["none", "everyone", "named"]
+                  },
+                  "profileIds": {
+                    "default": [],
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["mode"]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "bookId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": ["none", "everyone", "named"]
+                    },
+                    "profiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "name"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["mode", "profiles"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/{bookId}/hidden": {
+      "put": {
+        "operationId": "setBookHidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hidden": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["hidden"]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "bookId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "nullable": true,
+                  "enum": [null]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {

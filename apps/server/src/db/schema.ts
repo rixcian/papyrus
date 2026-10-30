@@ -30,6 +30,10 @@ export const books = sqliteTable(
     /** Folded title + first author, for matching new Files to this Book (ticket 09). */
     matchKey: text('match_key').notNull(),
     coverExt: text('cover_ext'),
+    /** `none`, `everyone` (including Profiles created later) or `named` (book_shares). */
+    shareMode: text('share_mode').notNull().default('none'),
+    /** When it was Shared with everyone; that is when it counts as added for Recipients. */
+    sharedAt: integer('shared_at'),
     addedAt: integer('added_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
@@ -61,6 +65,39 @@ export const bookTags = sqliteTable(
     tag: text('tag').notNull(),
   },
   (t) => [primaryKey({ columns: [t.bookId, t.tag] }), index('book_tags_tag').on(t.tag)],
+)
+
+/** Recipients of a Book Shared with named Profiles (ticket 06). */
+export const bookShares = sqliteTable(
+  'book_shares',
+  {
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    sharedAt: integer('shared_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bookId, t.profileId] }),
+    index('book_shares_profile').on(t.profileId),
+  ],
+)
+
+/** A Recipient's "remove from my library"; kept across revoke and re-Share (ticket 06). */
+export const hiddenBooks = sqliteTable(
+  'hidden_books',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    hiddenAt: integer('hidden_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.profileId, t.bookId] })],
 )
 
 export const files = sqliteTable(

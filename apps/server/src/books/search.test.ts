@@ -149,6 +149,8 @@ describe('library search', () => {
       authors: [],
       series: [],
       tags: [],
+      shared: 0,
+      hidden: 0,
     })
     expect((await list(device, { q: 'dune' })).total).toBe(1)
   })
