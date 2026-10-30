@@ -3,6 +3,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router'
 import { ApiError } from './api/client'
+import { PwaProvider } from './lib/pwa'
 import { router } from './router'
 import './index.css'
 
@@ -12,7 +13,9 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
+      // Offline, fail fast so the offline fallbacks show at once.
+      retry: (count, error) =>
+        navigator.onLine && !(error instanceof ApiError && error.status < 500) && count < 2,
       staleTime: 30_000,
     },
   },
@@ -24,7 +27,9 @@ if (!root) throw new Error('#root missing')
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <PwaProvider>
+        <RouterProvider router={router} />
+      </PwaProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

@@ -143,3 +143,34 @@ describe('reading state in the library', () => {
     )
   })
 })
+
+describe('evicting Offline Books', () => {
+  it('tells a device to drop Offline Books that are deleted, unshared or hidden', async () => {
+    const { device, alice, bookId } = await setup()
+    const bob = new Device(h.app)
+    const bobProfile = await bob.createProfile('Bob')
+    const evictFor = async (d: Device, profileId: string, ids: string[]) =>
+      (await sync(d, profileId, { offlineBookIds: ids } as SyncBody)).body.evict
+
+    expect(await evictFor(device, alice.id, [bookId, 'gone'])).toEqual(['gone'])
+    expect(await evictFor(bob, bobProfile.id, [bookId])).toEqual([bookId])
+
+    const share = (mode: string) =>
+      device.request({ method: 'PUT', url: `/api/books/${bookId}/share`, payload: { mode } })
+    await share('everyone')
+    expect(await evictFor(bob, bobProfile.id, [bookId])).toEqual([])
+    await bob.request({
+      method: 'PUT',
+      url: `/api/books/${bookId}/hidden`,
+      payload: { hidden: true },
+    })
+    expect(await evictFor(bob, bobProfile.id, [bookId])).toEqual([bookId])
+    await bob.request({
+      method: 'PUT',
+      url: `/api/books/${bookId}/hidden`,
+      payload: { hidden: false },
+    })
+    await share('none')
+    expect(await evictFor(bob, bobProfile.id, [bookId])).toEqual([bookId])
+  })
+})

@@ -1,12 +1,16 @@
 import { Link, Outlet, useNavigate } from 'react-router'
+import { usePwa } from '@/lib/pwa'
 import { useSession } from '@/lib/session'
 import { ProfileAvatar } from './profile-avatar'
+import { Button } from './ui/button'
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/menu'
 import { UploadProvider } from './uploads'
 
 export function AppShell() {
   const { data: profile } = useSession()
   const navigate = useNavigate()
+  // Only outside the reader, so an update never interrupts a chapter (ticket 05).
+  const { needRefresh, update } = usePwa()
 
   return (
     <UploadProvider>
@@ -34,6 +38,17 @@ export function AppShell() {
             </Menu>
           )}
         </header>
+        {needRefresh && (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-3 border-b bg-muted px-4 py-2 text-sm"
+          >
+            A new version of Papyrus is ready.
+            <Button size="xs" onClick={update}>
+              Reload
+            </Button>
+          </div>
+        )}
         <main className="mx-auto max-w-6xl p-4 sm:p-6">
           <Outlet />
         </main>

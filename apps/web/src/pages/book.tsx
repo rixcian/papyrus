@@ -1,3 +1,4 @@
+import { CloudCheckIcon, CloudDownloadIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { BookCover } from '@/components/book-cover'
@@ -17,14 +18,26 @@ import {
   useSetHidden,
   useSetReadStatus,
 } from '@/lib/books'
+import {
+  isUnreachable,
+  offlineSupported,
+  useOfflineBooks,
+  useRemoveOffline,
+  useSaveOffline,
+} from '@/lib/offline'
 import { useSession } from '@/lib/session'
+import type { OfflineBook } from '@/offline/store'
 import type { ReadStatus } from '@/sync'
 
 export function BookPage() {
   const { bookId = '' } = useParams()
   const book = useBook(bookId)
+  const { data: profile } = useSession()
+  const offline = useOfflineBooks(profile?.id)
+  const saved = offline.data?.find((b) => b.bookId === bookId)
 
   if (book.isPending) return null
+  if (book.isError && saved && isUnreachable(book.error)) return <OfflineBookView book={saved} />
   if (book.isError)
     return (
       <div className="py-24 text-center">
@@ -106,6 +119,7 @@ function BookView({ book }: { book: BookDetail }) {
               </Button>
             </>
           )}
+          <OfflineToggle book={book} />
           <ShelvesMenu
             bookIds={[book.id]}
             onShelves={book.shelves.map((s) => s.id)}
@@ -192,6 +206,64 @@ function BookView({ book }: { book: BookDetail }) {
           navigate('/', { replace: true })
         }}
       />
+    </div>
+  )
+}
+
+/** Keeps the Book's readable Files on this device (ticket 05). */
+function OfflineToggle({ book }: { book: BookDetail }) {
+  const { data: profile } = useSession()
+  const profileId = profile?.id ?? ''
+  const offline = useOfflineBooks(profileId)
+  const save = useSaveOffline(profileId)
+  const remove = useRemoveOffline(profileId)
+  if (!offlineSupported || !book.files.some((f) => f.readable) || !offline.data) return null
+  const saved = offline.data.some((b) => b.bookId === book.id)
+  if (save.isPending)
+    return (
+      <Button variant="outline" disabled>
+        Saving for offline…
+      </Button>
+    )
+  return (
+    <>
+      <Button
+        variant="outline"
+        aria-pressed={saved}
+        disabled={remove.isPending}
+        onClick={() => (saved ? remove.mutate([book.id]) : save.mutate([book.id]))}
+      >
+        {saved ? <CloudCheckIcon /> : <CloudDownloadIcon />}
+        {saved ? 'Available offline' : 'Make available offline'}
+      </Button>
+      {save.isError && (
+        <p className="w-full text-destructive-foreground text-sm">{save.error.message}</p>
+      )}
+    </>
+  )
+}
+
+/** Book detail with no connection: what this device saved is enough to read. */
+function OfflineBookView({ book }: { book: OfflineBook }) {
+  return (
+    <div className="grid gap-8 md:grid-cols-[14rem_1fr]">
+      <BookCover title={book.title} coverUrl={book.coverUrl} className="mx-auto w-44 md:w-full" />
+      <div className="min-w-0">
+        <h1 className="font-semibold text-2xl tracking-tight">{book.title}</h1>
+        {book.authors.length > 0 && (
+          <p className="mt-1 text-lg text-muted-foreground">{book.authors.join(', ')}</p>
+        )}
+        <p className="mt-3 text-muted-foreground text-sm">
+          You're offline. This Book is saved on this device.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {book.files.map((file) => (
+            <Button key={file.id} render={<Link to={`/read/${file.id}`} />}>
+              Read {book.files.length > 1 && file.format.toUpperCase()}
+            </Button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

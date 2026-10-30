@@ -15,7 +15,7 @@ import {
 } from '../db/schema.ts'
 import { AppError, notFound } from '../errors.ts'
 import type { BlobStore } from './blobs.ts'
-import { ADDED_SQL, HIDDEN_SQL, VISIBLE_SQL } from './visibility.ts'
+import { ADDED_SQL, HIDDEN_SQL, IN_LIBRARY_SQL, VISIBLE_SQL } from './visibility.ts'
 
 export const SHARE_MODES = ['none', 'everyone', 'named'] as const
 export type ShareMode = (typeof SHARE_MODES)[number]
@@ -72,6 +72,18 @@ export class Library {
       .where(inArray(profiles.id, [...new Set(ids)]))
       .all()
     return new Map(rows.map((r) => [r.id, r.name]))
+  }
+
+  /** Which of these Books are in the Profile's library: visible and not hidden. */
+  inLibrary(profileId: string, bookIds: string[]): Set<string> {
+    if (!bookIds.length) return new Set()
+    const rows = this.db.$client
+      .prepare(
+        `SELECT b.id AS id FROM books b JOIN json_each(@ids) j ON j.value = b.id
+         WHERE ${IN_LIBRARY_SQL}`,
+      )
+      .all({ profileId, ids: JSON.stringify(bookIds) }) as { id: string }[]
+    return new Set(rows.map((r) => r.id))
   }
 
   isHidden(profileId: string, bookId: string): boolean {

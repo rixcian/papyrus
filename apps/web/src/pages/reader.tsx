@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetHeader, SheetPanel, SheetPopup, SheetTitle } from '@/components/ui/sheet'
 import { Slider } from '@/components/ui/slider'
 import { useIsMobile } from '@/hooks/use-media-query'
+import { isUnreachable } from '@/lib/offline'
 import { useSession } from '@/lib/session'
+import { fileCacheKey } from '@/offline/caches'
 import {
   type AnnotationEntry,
   AnnotationsPanel,
@@ -27,7 +29,7 @@ import {
 import { TocList, TypographyPanel } from '@/reader/panels'
 import { READER_THEMES, useReaderPrefs } from '@/reader/prefs'
 import { useAnnotations } from '@/reader/use-annotations'
-import { syncEngine } from '@/sync'
+import { offlineStore, syncEngine } from '@/sync'
 import type { Highlight } from '@/sync/annotations'
 import { type LocalProgress, readLocalProgress } from '@/sync/local-progress'
 import { collapse, compare } from '@/vendor/foliate-js/epubcfi.js'
@@ -36,9 +38,30 @@ import type { RelocateDetail, TocItem } from '@/vendor/foliate-js/view.js'
 export function ReaderPage() {
   const { fileId = '' } = useParams()
   const { data: profile } = useSession()
+  const profileId = profile?.id ?? ''
   const info = useQuery({
     queryKey: ['files', 'info', fileId],
-    queryFn: () => unwrap(api.GET('/api/files/{fileId}/info', { params: { path: { fileId } } })),
+    enabled: Boolean(profileId),
+    queryFn: async () => {
+      try {
+        return await unwrap(api.GET('/api/files/{fileId}/info', { params: { path: { fileId } } }))
+      } catch (error) {
+        // Offline, an Offline Book still opens from what this device saved (ticket 05).
+        const saved = isUnreachable(error)
+          ? await offlineStore.findFile(profileId, fileId)
+          : undefined
+        const file = saved?.files.find((f) => f.id === fileId)
+        if (!saved || !file) throw error
+        return {
+          id: file.id,
+          bookId: saved.bookId,
+          title: saved.title,
+          format: file.format as 'epub',
+          readable: true,
+          url: fileCacheKey(file.id),
+        }
+      }
+    },
   })
   // Best effort: offline, the reader resumes from this device's own copy.
   const state = useQuery({
@@ -54,10 +77,14 @@ export function ReaderPage() {
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 0,
     queryFn: async () => {
-      const res = await fetch(info.data?.url ?? '', { credentials: 'same-origin' })
-      if (!res.ok) throw new Error(`Couldn't download the File (${res.status})`)
+      // An Offline Book is read from the Cache API, online or not (ticket 05).
+      let blob = await offlineStore.fileBlob(fileId).catch(() => undefined)
+      if (!blob) {
+        const res = await fetch(info.data?.url ?? '', { credentials: 'same-origin' })
+        if (!res.ok) throw new Error(`Couldn't download the File (${res.status})`)
+        blob = await res.blob()
+      }
       // foliate-js sniffs some formats by name, so it needs a File rather than a bare Blob.
-      const blob = await res.blob()
       return new File([blob], `book.${info.data?.format}`, { type: blob.type })
     },
   })

@@ -199,4 +199,35 @@ describe('SyncEngine', () => {
     })
     expect(await annotations.forFile('bob', 'f1')).toEqual([])
   })
+
+  it('reports Offline Books and evicts what the server says to', async () => {
+    const storage = new MemoryStorage()
+    const factory = new IDBFactory()
+    const offline = new Map([['alice', ['book-1', 'book-2']]])
+    const sent: { offlineBookIds: string[] }[] = []
+    const engine = new SyncEngine({
+      storage,
+      outbox: new Outbox(factory),
+      annotations: new AnnotationStore(factory),
+      clock: new DeviceClock(storage),
+      debounceMs: 60_000,
+      offline: {
+        bookIds: async (profileId) => offline.get(profileId) ?? [],
+        evict: async (profileId, ids) =>
+          void offline.set(
+            profileId,
+            (offline.get(profileId) ?? []).filter((id) => !ids.includes(id)),
+          ),
+      },
+      fetch: (async (_url: string, init: RequestInit) => {
+        sent.push(JSON.parse(init.body as string))
+        return new Response(
+          JSON.stringify({ applied: 0, cursor: 1, records: [], evict: ['book-2'] }),
+        )
+      }) as unknown as typeof fetch,
+    })
+    await engine.flush('alice')
+    expect(sent[0]?.offlineBookIds).toEqual(['book-1', 'book-2'])
+    expect(offline.get('alice')).toEqual(['book-1'])
+  })
 })

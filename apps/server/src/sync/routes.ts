@@ -85,19 +85,23 @@ export function syncRoutes(db: Db, sync: SyncService, library: Library): Fastify
             deviceId: z.string().min(1).max(100),
             cursor: z.number().int().nonnegative(),
             changes: z.array(ChangeBody).max(5000),
+            /** This device's Offline Books for the Profile, to learn which to evict. */
+            offlineBookIds: z.array(z.string()).max(10_000).default([]),
           }),
           response: {
             200: z.object({
               applied: z.number(),
               cursor: z.number(),
               records: z.array(RecordBody),
+              /** Offline Books this device must drop: deleted, no longer Shared, or hidden. */
+              evict: z.array(z.string()),
             }),
             410: ErrorBody,
           },
         },
       },
       async (request) => {
-        const { profileId, deviceId, cursor, changes } = request.body
+        const { profileId, deviceId, cursor, changes, offlineBookIds } = request.body
         const exists = db
           .select({ id: profiles.id })
           .from(profiles)
@@ -105,7 +109,9 @@ export function syncRoutes(db: Db, sync: SyncService, library: Library): Fastify
           .get()
         if (!exists) throw new AppError(410, 'profile_gone', 'This Profile has been deleted')
         const { applied } = sync.apply(profileId, deviceId, changes)
-        return { applied, ...sync.pull(profileId, cursor) }
+        const keep = library.inLibrary(profileId, offlineBookIds)
+        const evict = [...new Set(offlineBookIds)].filter((id) => !keep.has(id))
+        return { applied, ...sync.pull(profileId, cursor), evict }
       },
     )
 

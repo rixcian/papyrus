@@ -6,7 +6,14 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   browser,
 }) => {
   const errors: string[] = []
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  page.on(
+    'console',
+    // The browser logs every request that fails while the test is offline on purpose.
+    (m) =>
+      m.type() === 'error' &&
+      !m.text().includes('ERR_INTERNET_DISCONNECTED') &&
+      errors.push(m.text()),
+  )
   page.on('pageerror', (e) => errors.push(e.message))
 
   await page.goto('/')
@@ -186,6 +193,40 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await bob.goto('/')
   await expect(bob.getByRole('link', { name: /Sietch Tales/ })).toBeVisible()
   await bob.screenshot({ path: 'test-results/library-shared.png' })
+
+  // Offline Books (ticket 05): save one, lose the connection, and still read it.
+  await page.goto('/')
+  await page.locator('a[href^="/books/"]', { hasText: 'Arrakis Notes' }).click()
+  await page.getByRole('button', { name: 'Make available offline' }).click()
+  await expect(page.getByRole('button', { name: 'Available offline', exact: true })).toBeVisible()
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await page.context().setOffline(true)
+  await page.goto('/')
+  await expect(page.getByText(/offline\. These are the Books saved on this device/)).toBeVisible()
+  await expect(page.getByRole('link', { name: /Sietch Tales/ })).toHaveCount(0)
+  await page.screenshot({ path: 'test-results/offline-library.png' })
+  await page.getByRole('link', { name: /Arrakis Notes/ }).click()
+  await page.getByRole('link', { name: 'Read' }).click()
+  await expect(page.locator('header').getByText(/Chapter/)).toBeVisible({ timeout: 15_000 })
+  await page.screenshot({ path: 'test-results/offline-reader.png' })
+  await page.context().setOffline(false)
+
+  // Taking a Share back evicts the Recipient's offline copy at the next sync.
+  await bob.getByRole('link', { name: /Sietch Tales/ }).click()
+  await bob.getByRole('button', { name: 'Make available offline' }).click()
+  await expect(bob.getByRole('button', { name: 'Available offline', exact: true })).toBeVisible()
+  await page.goto('/')
+  await page
+    .getByRole('link', { name: /Sietch Tales/ })
+    .first()
+    .click()
+  await page.getByRole('button', { name: 'Share' }).click()
+  await page.getByRole('radio', { name: 'Not shared' }).click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Not shared')).toBeVisible()
+  await bob.goto('/settings')
+  await expect(bob.getByText('None yet.', { exact: false })).toBeVisible()
+  await bob.screenshot({ path: 'test-results/settings-device.png', fullPage: true })
 
   expect(errors).toEqual([])
 })

@@ -1,6 +1,8 @@
 import { XIcon } from 'lucide-react'
 import { useState } from 'react'
 import { type BookSummary, useDeleteBooks, useSetHidden } from '@/lib/books'
+import { offlineSupported, useSaveOffline } from '@/lib/offline'
+import { useSession } from '@/lib/session'
 import { ConfirmDialog } from './confirm-dialog'
 import { ShareDialog } from './share-dialog'
 import { ShelvesMenu } from './shelves-menu'
@@ -26,6 +28,8 @@ export function SelectionBar({
   const shared = books.filter((b) => !b.owned).map((b) => b.id)
   const setHidden = useSetHidden()
   const deleteBooks = useDeleteBooks()
+  const { data: profile } = useSession()
+  const saveOffline = useSaveOffline(profile?.id ?? '')
   const [sharing, setSharing] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -45,6 +49,21 @@ export function SelectionBar({
           </Button>
         }
       />
+      {offlineSupported && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={saveOffline.isPending}
+          onClick={() =>
+            saveOffline.mutate(
+              books.map((b) => b.id),
+              { onSuccess: onClear },
+            )
+          }
+        >
+          {saveOffline.isPending ? 'Saving…' : 'Make available offline'}
+        </Button>
+      )}
       {own.length > 0 && (
         <Button size="sm" variant="outline" onClick={() => setSharing(true)}>
           Share{shared.length > 0 && ` ${own.length}`}

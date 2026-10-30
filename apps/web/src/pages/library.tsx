@@ -9,6 +9,7 @@ import {
   SelectionContext,
 } from '@/components/book-views'
 import { LibraryFilters } from '@/components/library-filters'
+import { OfflineLibrary } from '@/components/offline-library'
 import { SelectionBar } from '@/components/selection-bar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,8 @@ import {
   useContinueReading,
   useFacets,
 } from '@/lib/books'
+import { isUnreachable } from '@/lib/offline'
+import { useSession } from '@/lib/session'
 import { useShelves } from '@/lib/shelves'
 import type { ReadStatus } from '@/sync'
 
@@ -105,6 +108,7 @@ export function LibraryPage() {
   const wide = useMediaQuery('lg')
   const list = useBookList(query)
   const continuing = useContinueReading()
+  const { data: profile } = useSession()
   const hiddenCount = useFacets().data?.hidden ?? 0
   const shelves = useShelves()
   const shelfName = shelves.data?.find((s) => s.id === query.shelf)?.name
@@ -157,7 +161,11 @@ export function LibraryPage() {
 
   if (list.isPending) return null
   if (list.isError)
-    return <p className="text-destructive-foreground">Couldn't load your library.</p>
+    return isUnreachable(list.error) && profile ? (
+      <OfflineLibrary profileId={profile.id} />
+    ) : (
+      <p className="text-destructive-foreground">Couldn't load your library.</p>
+    )
 
   const filtered = Object.keys(query).some((k) => k !== 'sort')
   const books = list.data.pages.flatMap((p) => p.books)

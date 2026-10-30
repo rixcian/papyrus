@@ -38,6 +38,13 @@ export interface SyncEngineOptions {
   fetch?: typeof fetch
   /** Quiet period before a flush (ticket 08: about 2 s). */
   debounceMs?: number
+  /** This device's Offline Books, reported on every sync so the server can say what to evict. */
+  offline?: OfflineIndex
+}
+
+export interface OfflineIndex {
+  bookIds(profileId: string): Promise<string[]>
+  evict(profileId: string, bookIds: string[]): Promise<void>
 }
 
 const cursorKey = (profileId: string) => `papyrus:sync-cursor:${profileId}`
@@ -53,6 +60,7 @@ export class SyncEngine {
   private readonly storage: Storage
   private readonly fetchImpl: typeof fetch
   private readonly debounceMs: number
+  private readonly offline: OfflineIndex | undefined
   private timer: ReturnType<typeof setTimeout> | undefined
   private flushing: Promise<void> | undefined
   private again = false
@@ -65,6 +73,7 @@ export class SyncEngine {
     this.annotations = options.annotations ?? new AnnotationStore()
     this.fetchImpl = options.fetch ?? ((...args) => fetch(...args))
     this.debounceMs = options.debounceMs ?? 2000
+    this.offline = options.offline
   }
 
   get deviceId(): string {
@@ -131,6 +140,7 @@ export class SyncEngine {
     if (alsoPull && !byProfile.has(alsoPull)) byProfile.set(alsoPull, [])
 
     for (const [profileId, sent] of byProfile) {
+      const offlineBookIds = (await this.offline?.bookIds(profileId)) ?? []
       let res: Response
       try {
         res = await this.fetchImpl('/api/sync', {
@@ -143,6 +153,7 @@ export class SyncEngine {
             deviceId: this.deviceId,
             cursor: Number(this.storage.getItem(cursorKey(profileId)) ?? 0),
             changes: sent.map((e) => e.change),
+            offlineBookIds,
           }),
         })
       } catch {
@@ -152,14 +163,27 @@ export class SyncEngine {
         // The Profile was deleted; its queued changes can never land (ticket 08).
         await this.outbox.dropProfile(profileId)
         this.storage.removeItem(cursorKey(profileId))
+        await this.evict(profileId, offlineBookIds)
         continue
       }
       if (!res.ok) continue
-      const body = (await res.json()) as { cursor: number; records: ServerRecord[] }
+      const body = (await res.json()) as {
+        cursor: number
+        records: ServerRecord[]
+        evict?: string[]
+      }
       await this.outbox.acknowledge(sent)
       this.storage.setItem(cursorKey(profileId), String(body.cursor))
       await this.applyPulled(profileId, body.records)
+      await this.evict(profileId, body.evict ?? [])
     }
+  }
+
+  /** Deleted, unshared or hidden Books leave the device (ticket 06). */
+  private async evict(profileId: string, bookIds: string[]): Promise<void> {
+    if (!bookIds.length || !this.offline) return
+    await this.offline.evict(profileId, bookIds)
+    this.notify(profileId, [])
   }
 
   private async applyPulled(profileId: string, records: ServerRecord[]): Promise<void> {
