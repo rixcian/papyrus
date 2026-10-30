@@ -1,0 +1,24 @@
+{
+  "name": "papyrus",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @papyrus/server --filter @papyrus/web dev",
+    "build": "pnpm --filter @papyrus/web build && pnpm --filter @papyrus/server build",
+    "check": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "gen:api": "pnpm --filter @papyrus/server gen:openapi && pnpm --filter @papyrus/web gen:api"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@types/node": "^24",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

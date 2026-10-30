@@ -1,0 +1,12 @@
+{
+  "name": "@papyrus/api-codegen",
+  "private": true,
+  "description": "Generates the web app's API types. Kept apart because openapi-typescript needs the TypeScript 5 JS API, which TypeScript 7 no longer ships.",
+  "scripts": {
+    "generate": "openapi-typescript ../../apps/web/src/api/openapi.json -o ../../apps/web/src/api/schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

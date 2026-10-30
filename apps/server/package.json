@@ -1,0 +1,35 @@
+{
+  "name": "@papyrus/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/index.ts",
+    "build": "node scripts/build.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p .",
+    "db:generate": "drizzle-kit generate",
+    "gen:openapi": "node src/scripts/openapi.ts ../web/src/api/openapi.json"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.5",
+    "@fastify/multipart": "10.1.6",
+    "@fastify/static": "10.1.8",
+    "@fastify/swagger": "9.9.2",
+    "@fastify/type-provider-zod": "1.0.3",
+    "@papyrus/shared": "workspace:*",
+    "better-sqlite3": "13.0.3",
+    "drizzle-orm": "0.45.4",
+    "fast-xml-parser": "5.11.2",
+    "fastify": "5.12.7",
+    "yauzl": "3.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/yauzl": "3.4.0",
+    "@types/yazl": "3.3.1",
+    "drizzle-kit": "0.31.11",
+    "esbuild": "^0.27.0",
+    "yazl": "3.3.1"
+  }
+}

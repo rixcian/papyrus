@@ -1,0 +1,41 @@
+import { createBrowserRouter, Navigate, Outlet } from 'react-router'
+import { AppShell } from './components/app-shell'
+import { useProfiles, useSession } from './lib/session'
+import { LibraryPage } from './pages/library'
+import { ProfilesPage } from './pages/profiles'
+import { SettingsPage } from './pages/settings'
+import { WelcomePage } from './pages/welcome'
+
+function FullPageMessage({ children }: { children: string }) {
+  return <div className="grid min-h-dvh place-items-center text-muted-foreground">{children}</div>
+}
+
+/** Sends the device to first run or the picker until it has an Active Profile. */
+function RequireProfile() {
+  const profiles = useProfiles()
+  const session = useSession()
+  if (profiles.isPending || session.isPending) return <FullPageMessage>Loading…</FullPageMessage>
+  if (profiles.isError || session.isError)
+    return <FullPageMessage>Can't reach the Papyrus server.</FullPageMessage>
+  if (profiles.data.length === 0) return <Navigate to="/welcome" replace />
+  if (!session.data) return <Navigate to="/profiles" replace />
+  return <Outlet />
+}
+
+export const router = createBrowserRouter([
+  { path: '/welcome', element: <WelcomePage /> },
+  { path: '/profiles', element: <ProfilesPage /> },
+  {
+    element: <RequireProfile />,
+    children: [
+      {
+        element: <AppShell />,
+        children: [
+          { index: true, element: <LibraryPage /> },
+          { path: 'settings', element: <SettingsPage /> },
+        ],
+      },
+    ],
+  },
+  { path: '*', element: <Navigate to="/" replace /> },
+])
