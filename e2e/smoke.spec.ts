@@ -145,6 +145,18 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await page.keyboard.press('Escape')
   await expect(page.getByRole('button', { name: 'Bookmark this page' })).toBeVisible()
 
+  // Translate a selection (DeepL through the server; a fake here), into Czech by default.
+  await select()
+  await page.getByRole('button', { name: 'Translate' }).click()
+  const translation = page.getByRole('dialog', { name: 'Translation' })
+  await expect(translation).toContainText('CS: Paragraph 2 of Chapter Three')
+  await expect(translation).toContainText('English →')
+  await page.screenshot({ path: 'test-results/reader-translate.png' })
+  await translation.getByLabel('Translate to').selectOption('DE')
+  await expect(translation).toContainText('DE: Paragraph 2 of Chapter Three')
+  await translation.getByRole('button', { name: 'Close translation' }).click()
+  await expect(translation).toHaveCount(0)
+
   await page.getByRole('button', { name: 'Text and layout' }).click()
   await page.getByRole('button', { name: 'Sepia' }).click()
   await page.keyboard.press('Escape')

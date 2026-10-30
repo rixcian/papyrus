@@ -13,6 +13,8 @@ const EnvSchema = z.object({
   PAPYRUS_IMPORT_DELETE_SOURCE: bool.default(false),
   PAPYRUS_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(500),
   PAPYRUS_TRUST_PROXY: bool.default(false),
+  PAPYRUS_DEEPL_API_KEY: z.string().optional(),
+  PAPYRUS_DEEPL_URL: z.url().optional(),
   PAPYRUS_OPENLIBRARY_URL: z.url().default('https://openlibrary.org'),
   PAPYRUS_OPENLIBRARY_COVERS_URL: z.url().default('https://covers.openlibrary.org'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -29,6 +31,10 @@ export interface Config {
   importDeleteSource: boolean
   maxUploadBytes: number
   trustProxy: boolean
+  /** Turns on translating selections in the reader. */
+  deeplApiKey: string | undefined
+  /** Overrides the DeepL host, which otherwise follows the key's plan; tests use a fake. */
+  deeplUrl: string | undefined
   /** Where "Find online" asks; tests point these at a fake. */
   openLibraryUrl: string
   openLibraryCoversUrl: string
@@ -47,6 +53,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     importDeleteSource: e.PAPYRUS_IMPORT_DELETE_SOURCE,
     maxUploadBytes: e.PAPYRUS_MAX_UPLOAD_MB * 1024 * 1024,
     trustProxy: e.PAPYRUS_TRUST_PROXY,
+    deeplApiKey: e.PAPYRUS_DEEPL_API_KEY?.trim() || undefined,
+    deeplUrl: e.PAPYRUS_DEEPL_URL,
     openLibraryUrl: e.PAPYRUS_OPENLIBRARY_URL.replace(/\/$/, ''),
     openLibraryCoversUrl: e.PAPYRUS_OPENLIBRARY_COVERS_URL.replace(/\/$/, ''),
     logLevel: e.LOG_LEVEL,

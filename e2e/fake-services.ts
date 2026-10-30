@@ -1,5 +1,5 @@
-// A stand-in for openlibrary.org and covers.openlibrary.org, so e2e runs never need the
-// internet. Started by playwright.config.ts; the server is pointed at it through env.
+// Stand-ins for openlibrary.org, covers.openlibrary.org and the DeepL API, so e2e runs never
+// need the internet. Started by playwright.config.ts; the server is pointed at it through env.
 import http from 'node:http'
 
 const PNG = Buffer.from(
@@ -37,6 +37,21 @@ http
     ) {
       res.writeHead(200, { 'content-type': 'image/png' })
       return res.end(PNG)
+    }
+    if (url.pathname === '/v2/translate' && req.method === 'POST') {
+      let raw = ''
+      req.on('data', (chunk) => {
+        raw += chunk
+      })
+      req.on('end', () => {
+        const body = JSON.parse(raw) as { text: string[]; target_lang: string }
+        json({
+          translations: [
+            { detected_source_language: 'EN', text: `${body.target_lang}: ${body.text[0]}` },
+          ],
+        })
+      })
+      return
     }
     if (url.pathname === '/health') return json({ ok: true })
     res.writeHead(404, { 'content-type': 'application/json' })

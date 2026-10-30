@@ -16,7 +16,7 @@ export interface Harness {
 /** A fresh app on a temp data dir and a migrated SQLite file. */
 export async function createHarness(
   env: Record<string, string> = {},
-  deps: Pick<AppDeps, 'openLibrary'> = {},
+  deps: Pick<AppDeps, 'openLibrary' | 'deepl'> = {},
 ): Promise<Harness> {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'papyrus-test-'))
   const config = loadConfig({ PAPYRUS_DATA_DIR: dataDir, LOG_LEVEL: 'silent', ...env })

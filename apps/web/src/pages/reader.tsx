@@ -28,6 +28,7 @@ import {
 } from '@/reader/foliate-reader'
 import { TocList, TypographyPanel } from '@/reader/panels'
 import { READER_THEMES, useReaderPrefs } from '@/reader/prefs'
+import { TranslationCard, useTranslateTarget, useTranslationEnabled } from '@/reader/translation'
 import { useAnnotations } from '@/reader/use-annotations'
 import { offlineStore, syncEngine } from '@/sync'
 import type { Highlight } from '@/sync/annotations'
@@ -159,6 +160,9 @@ function Reader({
   const [selection, setSelection] = useState<BookSelection | null>(null)
   const [tapped, setTapped] = useState<{ rect: DOMRect; highlights: Highlight[] } | null>(null)
   const [noteFor, setNoteFor] = useState<Highlight | null>(null)
+  const [translating, setTranslating] = useState<{ text: string; rect: DOMRect } | null>(null)
+  const [translateTo, setTranslateTo] = useTranslateTarget(profileId)
+  const translationEnabled = useTranslationEnabled()
   const { highlights, bookmarks } = useAnnotations(profileId, fileId)
   const search = useBookSearch(reader)
   const isMobile = useIsMobile()
@@ -167,6 +171,8 @@ function Reader({
   const onRelocate = useCallback(
     (detail: RelocateDetail) => {
       setLocation(detail)
+      // The card points at words that have just moved or left the page.
+      setTranslating(null)
       // Not before the initial navigation: reopening on a stale device must not overwrite a
       // newer position from another device with a fresh timestamp.
       if (ready.current && detail.cfi)
@@ -187,6 +193,7 @@ function Reader({
 
   const onTap = useCallback((zone: TapZone) => {
     setTapped(null)
+    setTranslating(null)
     if (zone === 'center') return setChrome((c) => !c)
     setChrome(false)
     if (zone === 'left') reader.current?.goLeft()
@@ -332,7 +339,30 @@ function Reader({
           >
             Copy
           </Button>
+          {translationEnabled && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setTranslating({ text: selection.text, rect: selection.rect })
+                reader.current?.clearSelection()
+                setSelection(null)
+              }}
+            >
+              Translate
+            </Button>
+          )}
         </FloatingBar>
+      )}
+
+      {translating && (
+        <TranslationCard
+          text={translating.text}
+          rect={translating.rect}
+          target={translateTo}
+          onTargetChange={setTranslateTo}
+          onClose={() => setTranslating(null)}
+        />
       )}
 
       {tapped && tapped.highlights.length > 1 && (

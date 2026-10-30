@@ -3181,6 +3181,147 @@
         }
       }
     },
+    "/api/translate/status": {
+      "get": {
+        "operationId": "translateStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["enabled"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/translate": {
+      "post": {
+        "operationId": "translate",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "CS",
+                      "EN-GB",
+                      "EN-US",
+                      "DE",
+                      "FR",
+                      "ES",
+                      "IT",
+                      "PL",
+                      "SK",
+                      "UK",
+                      "RU",
+                      "NL",
+                      "PT-PT",
+                      "PT-BR",
+                      "SV",
+                      "DA",
+                      "NB",
+                      "FI",
+                      "HU",
+                      "RO",
+                      "BG",
+                      "EL",
+                      "TR",
+                      "JA",
+                      "KO",
+                      "ZH-HANS"
+                    ]
+                  }
+                },
+                "required": ["text", "target"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "detectedSource": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["text", "detectedSource"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/imports": {
       "get": {
         "operationId": "listImports",

@@ -30,12 +30,16 @@ import { shelfRoutes } from './shelves/routes.ts'
 import { ShelfService } from './shelves/service.ts'
 import { syncRoutes } from './sync/routes.ts'
 import { SyncService } from './sync/service.ts'
+import { DeepL, deeplBaseUrl } from './translate/deepl.ts'
+import { translateRoutes } from './translate/routes.ts'
 
 export interface AppDeps {
   config: Config
   db: Db
   /** Tests pass a fake; everyone else talks to openlibrary.org. */
   openLibrary?: OpenLibrary
+  /** Tests pass a fake; otherwise DeepL is used when a key is configured. */
+  deepl?: DeepL
   /** Polls the import folder once listening; tests drive `importScanner.scan()` themselves. */
   startBackground?: boolean
 }
@@ -51,6 +55,7 @@ export async function buildApp({
   db,
   startBackground = true,
   openLibrary,
+  deepl: givenDeepL,
 }: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: config.logLevel },
@@ -127,6 +132,12 @@ export async function buildApp({
       openLibrary ?? new OpenLibrary(undefined, config.openLibraryUrl, config.openLibraryCoversUrl),
     ),
   )
+  const deepl =
+    givenDeepL ??
+    (config.deeplApiKey
+      ? new DeepL(config.deeplApiKey, config.deeplUrl ?? deeplBaseUrl(config.deeplApiKey))
+      : undefined)
+  await app.register(translateRoutes(db, deepl))
   await app.register(importRoutes(db, importScanner, config.importPollSeconds))
 
   await app.register(syncRoutes(db, sync, library))

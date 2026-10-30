@@ -16,7 +16,7 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:18090', trace: 'retain-on-failure' },
   webServer: [
     {
-      command: 'node e2e/fake-openlibrary.ts 18091',
+      command: 'node e2e/fake-services.ts 18091',
       url: 'http://localhost:18091/health',
       reuseExistingServer: false,
     },
@@ -32,6 +32,8 @@ export default defineConfig({
         PAPYRUS_IMPORT_POLL_SECONDS: '1',
         PAPYRUS_OPENLIBRARY_URL: 'http://localhost:18091',
         PAPYRUS_OPENLIBRARY_COVERS_URL: 'http://localhost:18091',
+        PAPYRUS_DEEPL_API_KEY: 'e2e-key:fx',
+        PAPYRUS_DEEPL_URL: 'http://localhost:18091',
         LOG_LEVEL: 'warn',
       },
     },
