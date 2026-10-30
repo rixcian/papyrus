@@ -23,6 +23,7 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
   - Ingest: multi-file web upload + a watched import folder on the server.
   - PWA: installable, with offline reading of Offline Books and progress syncing on reconnect.
 - Git has no remote yet: research branches are committed locally only.
+- **2026-10-30 hand-off**: the user handed every remaining decision to the agent ("do the tickets on your own, then start implementation") and carried execution past the spec. The tickets resolved after this point record the agent's decisions, not a live HITL exchange.
 
 ## Decisions so far
 
@@ -35,15 +36,14 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
 - [How do we pull metadata and covers out of epub/mobi/azw3 on a Node server?](issues/03-metadata-extraction.md): an in-house extractor. epub uses yauzl + fast-xml-parser on the OPF; mobi/azw3 parses PDB/EXTH, modelled on foliate-js mobi.js. Series reads EPUB 3 first, then Calibre metas, stored as REAL. MOBI carries no series, so it must be editable. Calibre is rejected (about 650 MiB).
 - [Sharing model: how does a Profile Share Books with another Profile?](issues/06-sharing-model.md): a Share covers one Book and goes to named Profiles or everyone. Recipients only read; reading state is always per Profile. On revoke, the Recipient's state is kept but hidden; deleting the Book removes it. Recipients can hide Books. The same file added by two Profiles makes two Books, never merged (ADR 0001).
 - [Profile lifecycle: creating, switching, and deleting Profiles](issues/07-profile-lifecycle.md): anyone creates a Profile from the picker; zero Profiles shows a first-run screen. A Profile is a unique name plus a colour/initial avatar. Each device remembers its Active Profile, which is sent as a `papyrus_profile` cookie, so File URLs and offline cache entries stay Profile-independent. A Profile can rename or delete only itself, and deletion hard-deletes its Books and state.
+- [Reading-state model: how are Reading Progress, Bookmarks, and Highlights anchored and synced?](issues/08-reading-state-model.md): progress is per File and resumes the File read most recently. Highlights (with at most one Note each) and Bookmarks are client-UUID records, merged per record by last write wins on HLC timestamps, with tombstones. A new per-Book Read Status. Reader preferences stay on the device. The outbox is tagged by Profile and sent to `POST /api/sync`. Sync is hand-rolled, not Evolu (ADR 0002).
+- [Storage layout and import pipeline: how do Files land on disk and get attached to Books?](issues/09-storage-and-import.md): blobs are content-addressed by sha256 and deduplicated invisibly. Duplicates are checked within the Profile: hash, then ISBN, then title + first author. A File attaches only when that format is missing and never overwrites metadata. The Owning Profile can Merge and Split. The import folder has one subfolder per Profile, is polled, and leaves sources in place by default. Calibre `metadata.opf` folders are imported as one Book. One file per upload request.
+- [What do the library and reader screens look like?](issues/10-library-and-reader-ui.md): resolved as a written outline. Routes: welcome/picker, library, Book detail, reader, settings. The library has filters, Continue reading, multi-select and an upload tray. The reader has chrome toggled by tap, sheet/drawer panels and a selection popover with four colours.
+- [Deployment and CI: how is Papyrus packaged, configured, and released?](issues/11-deployment-and-ci.md): a multi-stage `node:24-bookworm-slim` image, non-root, with `/data` and `/import` volumes and `PAPYRUS_*` env vars. Migrations and a daily `VACUUM INTO` backup run on start. A strict CSP. TLS is terminated upstream. GitHub Actions runs Biome, tsc and Vitest, then pushes to GHCR (`main`, `sha-`, semver, `latest`).
 
 ## Not yet specified
 
-- **Online metadata lookup** (Open Library / Google Books) for covers and descriptions: in scope, but its shape depends on the data model and import pipeline.
-- **Exporting highlights** (e.g. Markdown per Book).
-- **Backups**: what to back up (DB + books volume), and whether the app helps (e.g. a SQLite snapshot endpoint).
-- **Search implementation**: metadata search (SQLite FTS5?) and how in-book search works, given that foliate-js's search module is reportedly very slow.
-- **Testing strategy** across server, web, and reader.
-- **Assembling the v1 spec**: the final ticket, once the route is clear.
+Nothing left. The last fog items (online metadata lookup, exporting highlights, backups, search, testing) were decided while assembling the spec and are recorded in its "Decided at assembly" section. [Spec](spec.md).
 
 ## Out of scope
 
@@ -51,5 +51,6 @@ A v1 spec (`.scratch/papyrus/spec.md`) for Papyrus with every decision locked, r
 - Reading PDFs and comics (cbz/cbr) in the browser: they can be stored, not read.
 - An instance password, user accounts, or an Owner/admin role: ruled out at charting.
 - Multi-arch images: amd64 only for now.
+- A library-wide "My Highlights" view, Google Books lookup, cover thumbnails/resizing: ruled out of v1 while assembling the [spec](spec.md).
 - Sharing a whole library or a shelf in one Share, and notifications for new Shares: ruled out by [Sharing model](issues/06-sharing-model.md). v1 Shares one Book at a time, and "everyone" covers the family case.
 - Transferring a deleted Profile's Books to another Profile, and uploaded avatar images: ruled out by [Profile lifecycle](issues/07-profile-lifecycle.md). Deleting a Profile hard-deletes its Books in v1.

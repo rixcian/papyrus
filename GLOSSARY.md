@@ -21,14 +21,17 @@ _Avoid_: grant, permission
 **Recipient**: A Profile that a Book is Shared with. A Recipient can read the Book, mark it as an Offline Book, put it on their own shelves, and hide it from their own library. They cannot change, delete, or re-share it.
 _Avoid_: viewer, guest
 
-**Reading Progress**: How far a Profile has got in a particular File of a Book.
+**Reading Progress**: How far a Profile has got in a particular File of a Book. Each File keeps its own; opening a Book resumes the File the Profile read most recently.
 _Avoid_: position, bookmark (a bookmark is a separate, deliberate marker)
+
+**Read Status**: Whether a Profile has not started a Book, is reading it, or has finished it. It belongs to the Book, not to a File, and the Profile can set it by hand.
+_Avoid_: state, progress (Reading Progress is the location within a File)
 
 **Bookmark**: A location in a File that a Profile has deliberately marked to return to.
 
 **Highlight**: A passage in a File that a Profile has marked, in one of a fixed set of colours. Private to that Profile.
 
-**Note**: Text a Profile attaches to a Highlight. A Note never exists without its Highlight.
+**Note**: Text a Profile attaches to a Highlight. A Highlight has at most one Note, and a Note never exists without its Highlight.
 _Avoid_: annotation, comment
 
 **Offline Book**: A Book that a Profile has marked as available offline on a device, so it can be read without a connection.
