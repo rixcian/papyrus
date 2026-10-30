@@ -215,24 +215,35 @@ export function formatSize(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`
 }
 
-/** XHR rather than fetch, for upload progress. One file per request (ticket 09). */
-export function uploadFile(
-  file: File,
+const AUDIO_EXTENSIONS = /\.(mp3|m4a|m4b|aac|ogg|oga|opus)$/i
+
+export const isAudioFile = (file: File) => AUDIO_EXTENSIONS.test(file.name)
+
+/**
+ * XHR rather than fetch, for upload progress. Ebooks go one per request (ticket 09); audio
+ * goes all in one request, so the server can group recordings into Audio Files.
+ */
+export function uploadFiles(
+  files: File[],
+  audio: boolean,
   onProgress: (fraction: number) => void,
-): Promise<IngestResult> {
+): Promise<IngestResult[]> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/uploads')
+    xhr.open('POST', audio ? '/api/uploads/audio' : '/api/uploads')
     xhr.responseType = 'json'
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
     xhr.onload = () => {
-      const body = xhr.response as (IngestResult & { error?: string }) | null
-      if (xhr.status >= 200 && xhr.status < 300 && body) resolve(body)
-      else resolve({ status: 'failed', message: body?.message ?? `Upload failed (${xhr.status})` })
+      const body = xhr.response as
+        | (IngestResult & { error?: string; results?: IngestResult[] })
+        | null
+      if (xhr.status >= 200 && xhr.status < 300 && body) resolve(body.results ?? [body])
+      else
+        resolve([{ status: 'failed', message: body?.message ?? `Upload failed (${xhr.status})` }])
     }
     xhr.onerror = () => reject(new Error('Network error'))
     const form = new FormData()
-    form.append('file', file)
+    for (const file of files) form.append('file', file)
     xhr.send(form)
   })
 }

@@ -11,7 +11,7 @@ const EnvSchema = z.object({
   PAPYRUS_IMPORT_DIR: z.string().optional(),
   PAPYRUS_IMPORT_POLL_SECONDS: z.coerce.number().int().positive().default(30),
   PAPYRUS_IMPORT_DELETE_SOURCE: bool.default(false),
-  PAPYRUS_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(500),
+  PAPYRUS_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(2048),
   PAPYRUS_TRUST_PROXY: bool.default(false),
   PAPYRUS_DEEPL_API_KEY: z.string().optional(),
   PAPYRUS_DEEPL_URL: z.url().optional(),

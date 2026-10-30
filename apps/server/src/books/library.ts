@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { and, asc, eq, inArray, notInArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, notInArray, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.ts'
 import {
   type BookRow,
@@ -9,7 +9,10 @@ import {
   books,
   bookTags,
   type FileRow,
+  type FileTrackRow,
+  fileChapters,
   files,
+  fileTracks,
   hiddenBooks,
   profiles,
 } from '../db/schema.ts'
@@ -245,7 +248,7 @@ export class Library {
   deleteBooks(bookIds: string[]): void {
     if (!bookIds.length) return
     const doomed = this.db.select().from(books).where(inArray(books.id, bookIds)).all()
-    const shas = this.filesOf(bookIds).map((f) => f.sha256)
+    const shas = this.blobsOf(this.filesOf(bookIds).map((f) => f.id))
     this.db.delete(books).where(inArray(books.id, bookIds)).run()
     for (const book of doomed) {
       const cover = this.coverPath(book)
@@ -278,20 +281,70 @@ export class Library {
       .all().length
     if (count <= 1)
       throw new AppError(409, 'last_file', 'This is the Book’s only File; delete the Book instead')
+    const shas = this.blobsOf([file.id])
     this.db
       .delete(files)
       .where(and(eq(files.id, file.id), eq(files.bookId, book.id)))
       .run()
-    this.collectBlobs([file.sha256])
+    this.collectBlobs(shas)
+  }
+
+  /** The tracks of an Audio File, in order; empty for any other File. */
+  tracksOf(fileId: string): FileTrackRow[] {
+    return this.db
+      .select()
+      .from(fileTracks)
+      .where(eq(fileTracks.fileId, fileId))
+      .orderBy(fileTracks.position)
+      .all()
+  }
+
+  chaptersOf(fileId: string) {
+    return this.db
+      .select({ title: fileChapters.title, start: fileChapters.start })
+      .from(fileChapters)
+      .where(eq(fileChapters.fileId, fileId))
+      .orderBy(fileChapters.position)
+      .all()
+  }
+
+  /** Track counts per Audio File. */
+  trackCounts(fileIds: string[]): Map<string, number> {
+    if (!fileIds.length) return new Map()
+    const rows = this.db
+      .select({ fileId: fileTracks.fileId, n: sql<number>`count(*)` })
+      .from(fileTracks)
+      .where(inArray(fileTracks.fileId, fileIds))
+      .groupBy(fileTracks.fileId)
+      .all()
+    return new Map(rows.map((r) => [r.fileId, r.n]))
+  }
+
+  /** Every blob these Files hold: their own, or their Tracks' for Audio Files. */
+  private blobsOf(fileIds: string[]): string[] {
+    if (!fileIds.length) return []
+    const own = this.db
+      .select({ sha: files.sha256 })
+      .from(files)
+      .where(inArray(files.id, fileIds))
+      .all()
+    const tracks = this.db
+      .select({ sha: fileTracks.sha256 })
+      .from(fileTracks)
+      .where(inArray(fileTracks.fileId, fileIds))
+      .all()
+    return [...own, ...tracks].map((r) => r.sha)
   }
 
   private collectBlobs(shas: string[]): void {
     for (const sha of new Set(shas)) {
-      const stillUsed = this.db
-        .select({ id: files.id })
-        .from(files)
-        .where(eq(files.sha256, sha))
-        .get()
+      const stillUsed =
+        this.db.select({ id: files.id }).from(files).where(eq(files.sha256, sha)).get() ??
+        this.db
+          .select({ id: fileTracks.fileId })
+          .from(fileTracks)
+          .where(eq(fileTracks.sha256, sha))
+          .get()
       if (!stillUsed) this.blobs.remove(sha)
     }
   }

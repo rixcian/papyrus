@@ -9,17 +9,19 @@ import {
   useState,
 } from 'react'
 import { Link } from 'react-router'
-import { bookKeys, type IngestResult, uploadFile } from '@/lib/books'
+import { bookKeys, type IngestResult, isAudioFile, uploadFiles } from '@/lib/books'
 import { cn } from '@/lib/utils'
 
 const CONCURRENCY = 3
 
 interface UploadItem {
   id: number
-  file: File
+  /** One ebook, or every recording added together. */
+  files: File[]
+  audio: boolean
   progress: number
   state: 'queued' | 'uploading' | 'done'
-  result?: IngestResult
+  results?: IngestResult[]
 }
 
 const UploadContext = createContext<{ addFiles: (files: Iterable<File>) => void } | null>(null)
@@ -42,12 +44,19 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addFiles = useCallback((files: Iterable<File>) => {
-    const added = [...files].map((file) => ({
+    const all = [...files]
+    const recordings = all.filter(isAudioFile)
+    const item = (group: File[], audio: boolean): UploadItem => ({
       id: nextId.current++,
-      file,
+      files: group,
+      audio,
       progress: 0,
-      state: 'queued' as const,
-    }))
+      state: 'queued',
+    })
+    const added = [
+      ...all.filter((f) => !isAudioFile(f)).map((f) => item([f], false)),
+      ...(recordings.length ? [item(recordings, true)] : []),
+    ]
     if (added.length) setItems((all) => [...all, ...added])
   }, [])
 
@@ -57,11 +66,11 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     const next = items.filter((i) => i.state === 'queued').slice(0, CONCURRENCY - running)
     for (const item of next) {
       patch(item.id, { state: 'uploading' })
-      uploadFile(item.file, (progress) => patch(item.id, { progress }))
-        .catch((e: Error): IngestResult => ({ status: 'failed', message: e.message }))
-        .then((result) => {
-          patch(item.id, { state: 'done', progress: 1, result })
-          if (result.status !== 'failed')
+      uploadFiles(item.files, item.audio, (progress) => patch(item.id, { progress }))
+        .catch((e: Error): IngestResult[] => [{ status: 'failed', message: e.message }])
+        .then((results) => {
+          patch(item.id, { state: 'done', progress: 1, results })
+          if (results.some((r) => r.status !== 'failed'))
             void queryClient.invalidateQueries({ queryKey: bookKeys.all })
         })
     }
@@ -145,7 +154,9 @@ function UploadTray({ items, onClear }: { items: UploadItem[]; onClear: () => vo
       <ul className="max-h-72 overflow-y-auto p-2">
         {items.map((item) => (
           <li key={item.id} className="rounded-lg px-2 py-1.5 text-sm">
-            <div className="truncate">{item.file.name}</div>
+            <div className="truncate">
+              {item.files.length === 1 ? item.files[0]?.name : `${item.files.length} recordings`}
+            </div>
             {item.state !== 'done' ? (
               <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
                 <div
@@ -154,36 +165,43 @@ function UploadTray({ items, onClear }: { items: UploadItem[]; onClear: () => vo
                 />
               </div>
             ) : (
-              item.result && (
-                <div
-                  className={cn(
-                    'text-xs',
-                    item.result.status === 'failed' ? 'text-destructive' : 'text-muted-foreground',
-                  )}
-                >
-                  {resultText[item.result.status]}
-                  {item.result.status === 'attached' &&
-                    item.result.title &&
-                    ` ${item.result.title}`}
-                  {item.result.status === 'failed' &&
-                    item.result.message &&
-                    `: ${item.result.message}`}
-                  {item.result.bookId &&
-                    item.result.status === 'duplicate' &&
-                    item.result.title && (
-                      <>
-                        :{' '}
-                        <Link to="/" className="underline">
-                          {item.result.title}
-                        </Link>
-                      </>
-                    )}
-                </div>
-              )
+              item.results?.map((result, i) => (
+                <ResultLine
+                  // biome-ignore lint/suspicious/noArrayIndexKey: results never reorder
+                  key={i}
+                  result={result}
+                  named={item.audio && result.status === 'created'}
+                />
+              ))
             )}
           </li>
         ))}
       </ul>
     </aside>
+  )
+}
+
+function ResultLine({ result, named }: { result: IngestResult; named: boolean }) {
+  return (
+    <div
+      className={cn(
+        'text-xs',
+        result.status === 'failed' ? 'text-destructive' : 'text-muted-foreground',
+      )}
+    >
+      {result.status === 'created' && named ? 'New audiobook' : resultText[result.status]}
+      {(result.status === 'attached' || (named && result.status === 'created')) &&
+        result.title &&
+        ` ${result.title}`}
+      {result.status === 'failed' && result.message && `: ${result.message}`}
+      {result.bookId && result.status === 'duplicate' && result.title && (
+        <>
+          :{' '}
+          <Link to="/" className="underline">
+            {result.title}
+          </Link>
+        </>
+      )}
+    </div>
   )
 }

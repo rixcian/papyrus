@@ -13,6 +13,7 @@ import {
 } from '../db/schema.ts'
 import { AppError } from '../errors.ts'
 import type { ReadStatus, SyncService, Tx } from '../sync/service.ts'
+import { audioExtracted, probeAudio } from './audio.ts'
 import type { BlobStore } from './blobs.ts'
 import { extract } from './extract.ts'
 import type { FileFormat } from './formats.ts'
@@ -97,6 +98,14 @@ export class Reshape {
    * original's Shares, Read Statuses, shelf entries and hidden markers, so nobody loses a
    * File they could read. A Book's only File can't be split off.
    */
+  private async audioMetadata(fileId: string, fallbackName: string): Promise<Extracted> {
+    const tracks = this.library.tracksOf(fileId)
+    const probed = await Promise.all(
+      tracks.map((t) => probeAudio(this.blobs.pathFor(t.sha256), t.originalName)),
+    )
+    return audioExtracted(probed, fallbackName)
+  }
+
   async split(profileId: string, fileId: string): Promise<BookRow> {
     const { file, book } = this.library.visibleFile(profileId, fileId)
     this.library.ownedBook(profileId, book.id)
@@ -109,11 +118,14 @@ export class Reshape {
 
     let extracted: Extracted
     try {
-      extracted = await extract(
-        file.format as FileFormat,
-        this.blobs.pathFor(file.sha256),
-        file.originalName,
-      )
+      extracted =
+        file.format === 'audio'
+          ? await this.audioMetadata(file.id, file.originalName)
+          : await extract(
+              file.format as FileFormat,
+              this.blobs.pathFor(file.sha256),
+              file.originalName,
+            )
     } catch {
       extracted = this.metadataOf(book)
     }

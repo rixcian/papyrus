@@ -153,10 +153,50 @@ export const files = sqliteTable(
     format: text('format').notNull(),
     originalName: text('original_name').notNull(),
     size: integer('size').notNull(),
+    /** Seconds; set for Audio Files only. */
+    duration: real('duration'),
     addedAt: integer('added_at').notNull(),
   },
   (t) => [index('files_book').on(t.bookId), index('files_sha256').on(t.sha256)],
 )
+
+/** The recordings of an Audio File, in order; each is an ordinary blob. */
+export const fileTracks = sqliteTable(
+  'file_tracks',
+  {
+    fileId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    sha256: text('sha256').notNull(),
+    container: text('container').notNull(),
+    mime: text('mime').notNull(),
+    size: integer('size').notNull(),
+    duration: real('duration').notNull(),
+    title: text('title'),
+    originalName: text('original_name').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.fileId, t.position] }),
+    index('file_tracks_sha256').on(t.sha256),
+  ],
+)
+
+/** Chapters of an Audio File; `start` is seconds from the start of the whole File. */
+export const fileChapters = sqliteTable(
+  'file_chapters',
+  {
+    fileId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    title: text('title').notNull(),
+    start: real('start').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.fileId, t.position] })],
+)
+
+export type FileTrackRow = typeof fileTracks.$inferSelect
 
 export type BookRow = typeof books.$inferSelect
 export type FileRow = typeof files.$inferSelect

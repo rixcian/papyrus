@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/uploads/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["uploadAudio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/books": {
         parameters: {
             query?: never;
@@ -746,6 +762,58 @@ export interface operations {
             };
         };
     };
+    uploadAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: {
+                            /** @enum {string} */
+                            status: "created" | "attached" | "duplicate" | "failed";
+                            bookId?: string;
+                            title?: string;
+                            message?: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Default Response */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
     listBooks: {
         parameters: {
             query?: {
@@ -781,7 +849,7 @@ export interface operations {
                             seriesName: string | null;
                             seriesIndex: number | null;
                             coverUrl: string | null;
-                            formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
+                            formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                             owned: boolean;
                             sharedBy: string | null;
                             addedAt: number;
@@ -869,7 +937,7 @@ export interface operations {
                             fraction: number;
                             at: number;
                         } | null;
-                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
+                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;
                         language: string | null;
                         publisher: string | null;
@@ -893,10 +961,14 @@ export interface operations {
                         files: {
                             id: string;
                             /** @enum {string} */
-                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other";
                             originalName: string;
                             size: number;
                             readable: boolean;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
+                            trackCount: number;
                             url: string;
                             addedAt: number;
                         }[];
@@ -1013,7 +1085,7 @@ export interface operations {
                             fraction: number;
                             at: number;
                         } | null;
-                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
+                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;
                         language: string | null;
                         publisher: string | null;
@@ -1037,10 +1109,14 @@ export interface operations {
                         files: {
                             id: string;
                             /** @enum {string} */
-                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other";
                             originalName: string;
                             size: number;
                             readable: boolean;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
+                            trackCount: number;
                             url: string;
                             addedAt: number;
                         }[];
@@ -1200,7 +1276,7 @@ export interface operations {
                             fraction: number;
                             at: number;
                         } | null;
-                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
+                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;
                         language: string | null;
                         publisher: string | null;
@@ -1224,10 +1300,14 @@ export interface operations {
                         files: {
                             id: string;
                             /** @enum {string} */
-                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other";
                             originalName: string;
                             size: number;
                             readable: boolean;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
+                            trackCount: number;
                             url: string;
                             addedAt: number;
                         }[];
@@ -1307,7 +1387,7 @@ export interface operations {
                             fraction: number;
                             at: number;
                         } | null;
-                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
+                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;
                         language: string | null;
                         publisher: string | null;
@@ -1331,10 +1411,14 @@ export interface operations {
                         files: {
                             id: string;
                             /** @enum {string} */
-                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other";
                             originalName: string;
                             size: number;
                             readable: boolean;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
+                            trackCount: number;
                             url: string;
                             addedAt: number;
                         }[];
@@ -1618,7 +1702,7 @@ export interface operations {
                         bookId: string;
                         title: string;
                         /** @enum {string} */
-                        format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                        format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other";
                         readable: boolean;
                         url: string;
                     };

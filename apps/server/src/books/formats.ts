@@ -1,4 +1,4 @@
-export const FILE_FORMATS = ['epub', 'mobi', 'azw3', 'pdf', 'cbz', 'other'] as const
+export const FILE_FORMATS = ['epub', 'mobi', 'azw3', 'pdf', 'cbz', 'audio', 'other'] as const
 export type FileFormat = (typeof FILE_FORMATS)[number]
 
 /** Only these open in the browser reader; anything else is stored for download (ticket 01). */
@@ -13,6 +13,13 @@ const BY_EXTENSION: Record<string, FileFormat> = {
   kf8: 'azw3',
   pdf: 'pdf',
   cbz: 'cbz',
+  mp3: 'audio',
+  m4a: 'audio',
+  m4b: 'audio',
+  aac: 'audio',
+  ogg: 'audio',
+  oga: 'audio',
+  opus: 'audio',
 }
 
 export function formatFromFilename(name: string): FileFormat {

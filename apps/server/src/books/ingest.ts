@@ -3,7 +3,22 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Db } from '../db/client.ts'
-import { type BookRow, bookAuthors, books, bookTags, files } from '../db/schema.ts'
+import {
+  type BookRow,
+  bookAuthors,
+  books,
+  bookTags,
+  fileChapters,
+  files,
+  fileTracks,
+} from '../db/schema.ts'
+import {
+  audioExtracted,
+  audioIdentity,
+  chaptersFor,
+  type ProbedTrack,
+  probeAudio,
+} from './audio.ts'
 import type { BlobStore, StagedFile } from './blobs.ts'
 import { extract } from './extract.ts'
 import { formatFromFilename } from './formats.ts'
@@ -26,6 +41,20 @@ export interface IngestInput {
   extracted?: Extracted | undefined
 }
 
+export interface StagedTrack {
+  staged: StagedFile
+  originalName: string
+}
+
+export interface AudioIngestInput {
+  profileId: string
+  /** The recordings of one Audio File, already grouped and in order. */
+  tracks: (StagedTrack & { probed: ProbedTrack })[]
+  /** Title of last resort: a folder or the first file's name. */
+  fallbackName: string
+  extracted?: Extracted | undefined
+}
+
 /** Uploads and imports both land here (ticket 09). */
 export class Ingest {
   private readonly db: Db
@@ -45,6 +74,24 @@ export class Ingest {
     originalName,
     extracted: given,
   }: IngestInput): Promise<IngestResult> {
+    if (formatFromFilename(originalName) === 'audio') {
+      let probed: ProbedTrack
+      try {
+        probed = await probeAudio(staged.tempPath, originalName)
+      } catch (error) {
+        this.blobs.discard(staged)
+        return {
+          status: 'failed',
+          message: `Couldn't read ${originalName}: ${(error as Error).message}`,
+        }
+      }
+      return this.ingestAudio({
+        profileId,
+        tracks: [{ staged, originalName, probed }],
+        fallbackName: originalName,
+        extracted: given,
+      })
+    }
     const existing = this.findOwnFileByHash(profileId, staged.sha256)
     if (existing) {
       this.blobs.discard(staged)
@@ -86,6 +133,103 @@ export class Ingest {
           addedAt: now,
         })
         .run()
+      return target
+    })
+
+    if (extracted.cover && !book.coverExt) this.saveCover(book.id, extracted.cover)
+    return { status: match ? 'attached' : 'created', bookId: book.id, title: book.title }
+  }
+
+  /** Probes staged recordings; any that can't be read come back as failures. */
+  async probe(tracks: StagedTrack[]) {
+    const probed: (StagedTrack & { probed: ProbedTrack })[] = []
+    const failed: IngestResult[] = []
+    for (const t of tracks) {
+      try {
+        probed.push({ ...t, probed: await probeAudio(t.staged.tempPath, t.originalName) })
+      } catch (error) {
+        this.blobs.discard(t.staged)
+        failed.push({
+          status: 'failed',
+          message: `Couldn't read ${t.originalName}: ${(error as Error).message}`,
+        })
+      }
+    }
+    return { probed, failed }
+  }
+
+  /** One Audio File from its Tracks, matched to a Book like any other File. */
+  ingestAudio({
+    profileId,
+    tracks,
+    fallbackName,
+    extracted: given,
+  }: AudioIngestInput): IngestResult {
+    const discardAll = () => {
+      for (const t of tracks) this.blobs.discard(t.staged)
+    }
+    if (!tracks.length) return { status: 'failed', message: 'No recordings to add' }
+    const identity = audioIdentity(tracks.map((t) => t.staged.sha256))
+    const existing = this.findOwnFileByHash(profileId, identity)
+    if (existing) {
+      discardAll()
+      return {
+        status: 'duplicate',
+        bookId: existing.id,
+        title: existing.title,
+        message: 'Already in your library',
+      }
+    }
+
+    const probes = tracks.map((t) => t.probed)
+    const own = audioExtracted(probes, fallbackName)
+    const extracted: Extracted = given
+      ? {
+          metadata: given.metadata,
+          ...((given.cover ?? own.cover) && { cover: given.cover ?? own.cover }),
+        }
+      : own
+    const chapters = chaptersFor(probes)
+    const duration = probes.reduce((sum, t) => sum + t.duration, 0)
+    const match = this.findMatch(profileId, 'audio', extracted)
+    const now = Date.now()
+    for (const t of tracks) this.blobs.commit(t.staged)
+
+    const book = this.db.transaction((tx) => {
+      const target = match ?? this.createBook(tx, profileId, extracted, now)
+      if (match) this.fillEmptyFields(tx, match, extracted, now)
+      const fileId = randomUUID()
+      tx.insert(files)
+        .values({
+          id: fileId,
+          bookId: target.id,
+          sha256: identity,
+          format: 'audio',
+          originalName:
+            tracks.length === 1 ? (tracks[0]?.originalName ?? fallbackName) : fallbackName,
+          size: tracks.reduce((sum, t) => sum + t.staged.size, 0),
+          duration,
+          addedAt: now,
+        })
+        .run()
+      tracks.forEach((t, position) => {
+        tx.insert(fileTracks)
+          .values({
+            fileId,
+            position,
+            sha256: t.staged.sha256,
+            container: t.probed.container,
+            mime: t.probed.mime,
+            size: t.staged.size,
+            duration: t.probed.duration,
+            title: t.probed.title ?? null,
+            originalName: t.originalName,
+          })
+          .run()
+      })
+      chapters.forEach((c, position) => {
+        tx.insert(fileChapters).values({ fileId, position, title: c.title, start: c.start }).run()
+      })
       return target
     })
 

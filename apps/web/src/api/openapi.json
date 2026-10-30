@@ -523,6 +523,90 @@
         }
       }
     },
+    "/api/uploads/audio": {
+      "post": {
+        "operationId": "uploadAudio",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": ["created", "attached", "duplicate", "failed"]
+                          },
+                          "bookId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["status"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["results"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/books": {
       "get": {
         "operationId": "listBooks",
@@ -665,7 +749,7 @@
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                              "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                             }
                           },
                           "owned": {
@@ -889,7 +973,7 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                       }
                     },
                     "description": {
@@ -978,7 +1062,7 @@
                           },
                           "format": {
                             "type": "string",
-                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                           },
                           "originalName": {
                             "type": "string"
@@ -988,6 +1072,17 @@
                           },
                           "readable": {
                             "type": "boolean"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["text", "audio"]
+                          },
+                          "duration": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "trackCount": {
+                            "type": "number"
                           },
                           "url": {
                             "type": "string"
@@ -1002,6 +1097,9 @@
                           "originalName",
                           "size",
                           "readable",
+                          "kind",
+                          "duration",
+                          "trackCount",
                           "url",
                           "addedAt"
                         ],
@@ -1213,7 +1311,7 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                       }
                     },
                     "description": {
@@ -1302,7 +1400,7 @@
                           },
                           "format": {
                             "type": "string",
-                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                           },
                           "originalName": {
                             "type": "string"
@@ -1312,6 +1410,17 @@
                           },
                           "readable": {
                             "type": "boolean"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["text", "audio"]
+                          },
+                          "duration": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "trackCount": {
+                            "type": "number"
                           },
                           "url": {
                             "type": "string"
@@ -1326,6 +1435,9 @@
                           "originalName",
                           "size",
                           "readable",
+                          "kind",
+                          "duration",
+                          "trackCount",
                           "url",
                           "addedAt"
                         ],
@@ -1729,7 +1841,7 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                       }
                     },
                     "description": {
@@ -1818,7 +1930,7 @@
                           },
                           "format": {
                             "type": "string",
-                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                           },
                           "originalName": {
                             "type": "string"
@@ -1828,6 +1940,17 @@
                           },
                           "readable": {
                             "type": "boolean"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["text", "audio"]
+                          },
+                          "duration": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "trackCount": {
+                            "type": "number"
                           },
                           "url": {
                             "type": "string"
@@ -1842,6 +1965,9 @@
                           "originalName",
                           "size",
                           "readable",
+                          "kind",
+                          "duration",
+                          "trackCount",
                           "url",
                           "addedAt"
                         ],
@@ -2026,7 +2152,7 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                       }
                     },
                     "description": {
@@ -2115,7 +2241,7 @@
                           },
                           "format": {
                             "type": "string",
-                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                            "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                           },
                           "originalName": {
                             "type": "string"
@@ -2125,6 +2251,17 @@
                           },
                           "readable": {
                             "type": "boolean"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["text", "audio"]
+                          },
+                          "duration": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "trackCount": {
+                            "type": "number"
                           },
                           "url": {
                             "type": "string"
@@ -2139,6 +2276,9 @@
                           "originalName",
                           "size",
                           "readable",
+                          "kind",
+                          "duration",
+                          "trackCount",
                           "url",
                           "addedAt"
                         ],
@@ -2602,7 +2742,7 @@
                     },
                     "format": {
                       "type": "string",
-                      "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                      "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "audio", "other"]
                     },
                     "readable": {
                       "type": "boolean"

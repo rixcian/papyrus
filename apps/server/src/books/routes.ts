@@ -8,9 +8,10 @@ import { AppError, notFound } from '../errors.ts'
 import { requireProfile } from '../session.ts'
 import type { ShelfService } from '../shelves/service.ts'
 import { READ_STATUSES, type SyncService } from '../sync/service.ts'
+import { groupTracks, isAudioName } from './audio.ts'
 import type { BlobStore } from './blobs.ts'
 import { FILE_FORMATS, type FileFormat, READABLE_FORMATS } from './formats.ts'
-import type { Ingest } from './ingest.ts'
+import type { Ingest, StagedTrack } from './ingest.ts'
 import { type Library, SHARE_MODES } from './library.ts'
 import { matchKey, normaliseIsbn, sortTitle } from './metadata.ts'
 import type { Reshape } from './reshape.ts'
@@ -52,6 +53,12 @@ const BookFile = z.object({
   originalName: z.string(),
   size: z.number(),
   readable: z.boolean(),
+  /** Text is read, audio is listened to. */
+  kind: z.enum(['text', 'audio']),
+  /** Seconds, for an Audio File. */
+  duration: z.number().nullable(),
+  /** How many recordings an Audio File is made of; 0 for text. */
+  trackCount: z.number(),
   url: z.string(),
   addedAt: z.number(),
 })
@@ -109,6 +116,7 @@ const CONTENT_TYPES: Record<FileFormat, string> = {
   azw3: 'application/vnd.amazon.ebook',
   pdf: 'application/pdf',
   cbz: 'application/vnd.comicbook+zip',
+  audio: 'audio/mpeg',
   other: 'application/octet-stream',
 }
 
@@ -150,6 +158,9 @@ export function bookRoutes({
 
   function detail(profileId: string, book: BookRow): z.infer<typeof BookDetail> {
     const fileRows = library.filesOf([book.id])
+    const trackCounts = library.trackCounts(
+      fileRows.filter((f) => f.format === 'audio').map((f) => f.id),
+    )
     const owner = db
       .select({ name: profiles.name })
       .from(profiles)
@@ -184,6 +195,9 @@ export function bookRoutes({
         originalName: f.originalName,
         size: f.size,
         readable: READABLE_FORMATS.has(f.format as FileFormat),
+        kind: f.format === 'audio' ? ('audio' as const) : ('text' as const),
+        duration: f.duration,
+        trackCount: trackCounts.get(f.id) ?? 0,
         url: `/api/files/${f.id}`,
         addedAt: f.addedAt,
       })),
@@ -212,6 +226,54 @@ export function bookRoutes({
           throw new AppError(413, 'too_large', `${part.filename} is larger than the upload limit`)
         }
         return ingest.ingest({ profileId: request.profile.id, staged, originalName: part.filename })
+      },
+    )
+
+    // Every recording in one request, so the server can group them into Audio Files.
+    app.post(
+      '/api/uploads/audio',
+      {
+        schema: {
+          operationId: 'uploadAudio',
+          consumes: ['multipart/form-data'],
+          response: {
+            200: z.object({ results: z.array(IngestResultBody) }),
+            400: ErrorBody,
+            413: ErrorBody,
+          },
+        },
+      },
+      async (request) => {
+        const staged: StagedTrack[] = []
+        try {
+          for await (const part of request.files({
+            limits: { fileSize: maxUploadBytes, files: 2000 },
+          })) {
+            const file = await blobs.stage(part.file)
+            staged.push({ staged: file, originalName: part.filename })
+            if (part.file.truncated)
+              throw new AppError(
+                413,
+                'too_large',
+                `${part.filename} is larger than the upload limit`,
+              )
+            if (!isAudioName(part.filename))
+              throw new AppError(400, 'not_audio', `${part.filename} isn't an audio file`)
+          }
+        } catch (error) {
+          for (const t of staged) blobs.discard(t.staged)
+          throw error
+        }
+        if (!staged.length) throw new AppError(400, 'no_file', 'Send at least one audio file')
+        const { probed, failed } = await ingest.probe(staged)
+        const results = groupTracks(probed.map((t) => ({ ...t.probed, t }))).map((group) =>
+          ingest.ingestAudio({
+            profileId: request.profile.id,
+            tracks: group.map((g) => g.t),
+            fallbackName: group[0]?.originalName ?? 'Audiobook',
+          }),
+        )
+        return { results: [...results, ...failed] }
       },
     )
 
