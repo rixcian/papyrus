@@ -1,8 +1,31 @@
+import type { HighlightColour } from '@papyrus/shared'
+import { openDb, request, STORES } from './db'
+
 export type ReadStatus = 'unread' | 'reading' | 'finished'
+
+export interface BookmarkFields {
+  id: string
+  fileId: string
+  cfi: string
+  snippet: string
+  deleted: boolean
+}
+
+export interface HighlightFields {
+  id: string
+  fileId: string
+  cfiRange: string
+  colour: HighlightColour
+  text: string
+  note: string | null
+  deleted: boolean
+}
 
 export type Change =
   | { kind: 'progress'; fileId: string; cfi: string; fraction: number; hlc: string }
   | { kind: 'readStatus'; bookId: string; status: ReadStatus; hlc: string }
+  | ({ kind: 'bookmark'; hlc: string } & BookmarkFields)
+  | ({ kind: 'highlight'; hlc: string } & HighlightFields)
 
 export interface OutboxEntry {
   /** One entry per record: writing the same record again replaces it (ticket 08). */
@@ -12,20 +35,17 @@ export interface OutboxEntry {
 }
 
 export function entryKey(profileId: string, change: Change): string {
-  return change.kind === 'progress'
-    ? `${profileId}|progress|${change.fileId}`
-    : `${profileId}|readStatus|${change.bookId}`
+  switch (change.kind) {
+    case 'progress':
+      return `${profileId}|progress|${change.fileId}`
+    case 'readStatus':
+      return `${profileId}|readStatus|${change.bookId}`
+    default:
+      return `${profileId}|${change.kind}|${change.id}`
+  }
 }
 
-const DB_NAME = 'papyrus'
-const STORE = 'outbox'
-
-function request<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
+const STORE = STORES.outbox
 
 /** Changes waiting to reach the server, tagged with the Profile that made them. */
 export class Outbox {
@@ -37,12 +57,7 @@ export class Outbox {
   }
 
   private open(): Promise<IDBDatabase> {
-    this.db ??= new Promise((resolve, reject) => {
-      const req = this.factory.open(DB_NAME, 1)
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'key' })
-      req.onsuccess = () => resolve(req.result)
-      req.onerror = () => reject(req.error)
-    })
+    this.db ??= openDb(this.factory)
     return this.db
   }
 

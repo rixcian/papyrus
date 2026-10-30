@@ -31,7 +31,27 @@ export interface FoliateBook {
   metadata?: { title?: string | Record<string, string> }
 }
 
+export interface Annotation {
+  value: string
+}
+
+export interface DrawAnnotationDetail {
+  draw: (fn: import('./overlayer.js').DrawFunction, options?: Record<string, unknown>) => void
+  annotation: Annotation
+  doc: Document
+  range: Range
+}
+
+export interface ShowAnnotationDetail {
+  value: string
+  index: number
+  range: Range
+}
+
 export declare class View extends HTMLElement {
+  addAnnotation(annotation: Annotation, remove?: boolean): Promise<unknown>
+  deleteAnnotation(annotation: Annotation): Promise<unknown>
+  getCFI(index: number, range: Range): string
   book: FoliateBook
   renderer: FoliateRenderer
   open(book: Blob | File | string): Promise<void>

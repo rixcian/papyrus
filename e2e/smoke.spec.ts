@@ -37,6 +37,42 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await expect(page.locator('header').getByText('Chapter Three')).toBeVisible()
   await synced
 
+  // Highlight a sentence with a Note, then find it in the panel and the export.
+  const section = page.frames().find((f) => f.url().startsWith('blob:') && f !== page.mainFrame())
+  if (!section) throw new Error('no section iframe')
+  await section.evaluate(() => {
+    const p = [...document.querySelectorAll('p')].find((el) =>
+      el.textContent?.startsWith('Paragraph 2 '),
+    )
+    const text = p?.firstChild
+    if (!text) throw new Error('no paragraph')
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, 'Paragraph 2 of Chapter Three'.length)
+    document.getSelection()?.removeAllRanges()
+    document.getSelection()?.addRange(range)
+  })
+  await page.getByRole('button', { name: 'Note', exact: true }).click()
+  await page.getByRole('textbox', { name: 'Note' }).fill('Worth remembering')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Bookmark this page' }).click()
+  await expect(page.getByRole('button', { name: 'Remove bookmark' })).toBeVisible()
+  await page.getByRole('button', { name: 'Notes', exact: true }).click()
+  await expect(page.getByText('Paragraph 2 of Chapter Three', { exact: true })).toBeVisible()
+  await expect(page.getByText('Worth remembering')).toBeVisible()
+  await page.screenshot({ path: 'test-results/reader-notes.png' })
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export highlights (Markdown)' }).click()
+  const markdown = await (await download).createReadStream().then(async (stream) => {
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(chunk as Buffer)
+    return Buffer.concat(chunks).toString('utf8')
+  })
+  expect(markdown).toBe(
+    '# Arrakis Notes\n\nby Test Author\n\nParagraph 2 of Chapter Three\n\n> Worth remembering\n',
+  )
+  await page.keyboard.press('Escape')
+
   await page.getByRole('button', { name: 'Text and layout' }).click()
   await page.getByRole('button', { name: 'Sepia' }).click()
   await page.keyboard.press('Escape')

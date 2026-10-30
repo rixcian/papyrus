@@ -1,6 +1,6 @@
-import { compareHlc } from '@papyrus/shared'
+import { compareHlc, type HighlightColour } from '@papyrus/shared'
 import { useQuery } from '@tanstack/react-query'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -8,11 +8,27 @@ import { Sheet, SheetHeader, SheetPanel, SheetPopup, SheetTitle } from '@/compon
 import { Slider } from '@/components/ui/slider'
 import { useIsMobile } from '@/hooks/use-media-query'
 import { useSession } from '@/lib/session'
-import { FoliateReader, type FoliateReaderHandle, type TapZone } from '@/reader/foliate-reader'
+import {
+  type AnnotationEntry,
+  AnnotationsPanel,
+  ColourSwatches,
+  FloatingBar,
+  HighlightPicker,
+  NoteDialog,
+} from '@/reader/annotation-ui'
+import {
+  type BookSelection,
+  FoliateReader,
+  type FoliateReaderHandle,
+  type TapZone,
+} from '@/reader/foliate-reader'
 import { TocList, TypographyPanel } from '@/reader/panels'
 import { READER_THEMES, useReaderPrefs } from '@/reader/prefs'
+import { useAnnotations } from '@/reader/use-annotations'
 import { syncEngine } from '@/sync'
+import type { Highlight } from '@/sync/annotations'
 import { type LocalProgress, readLocalProgress } from '@/sync/local-progress'
+import { collapse, compare } from '@/vendor/foliate-js/epubcfi.js'
 import type { RelocateDetail, TocItem } from '@/vendor/foliate-js/view.js'
 
 export function ReaderPage() {
@@ -109,8 +125,12 @@ function Reader({
   const [location, setLocation] = useState<RelocateDetail | null>(null)
   const [scrub, setScrub] = useState<number | null>(null)
   const [chrome, setChrome] = useState(true)
-  const [panel, setPanel] = useState<'toc' | 'aa' | null>(null)
+  const [panel, setPanel] = useState<'toc' | 'aa' | 'notes' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selection, setSelection] = useState<BookSelection | null>(null)
+  const [tapped, setTapped] = useState<{ rect: DOMRect; highlights: Highlight[] } | null>(null)
+  const [noteFor, setNoteFor] = useState<Highlight | null>(null)
+  const { highlights, bookmarks } = useAnnotations(profileId, fileId)
   const isMobile = useIsMobile()
   const theme = READER_THEMES[prefs.theme]
 
@@ -136,14 +156,90 @@ function Reader({
   }, [])
 
   const onTap = useCallback((zone: TapZone) => {
+    setTapped(null)
     if (zone === 'center') return setChrome((c) => !c)
     setChrome(false)
     if (zone === 'left') reader.current?.goLeft()
     else reader.current?.goRight()
   }, [])
 
+  const saveHighlight = useCallback(
+    (h: Omit<Highlight, 'kind' | 'profileId' | 'hlc'>) =>
+      syncEngine.record(profileId, { kind: 'highlight', ...h }),
+    [profileId],
+  )
+
+  const createHighlight = (sel: BookSelection, colour: HighlightColour) => {
+    const h = {
+      id: crypto.randomUUID(),
+      fileId,
+      cfiRange: sel.cfi,
+      colour,
+      text: sel.text.slice(0, 10_000),
+      note: null,
+      deleted: false,
+    }
+    void saveHighlight(h)
+    reader.current?.clearSelection()
+    setSelection(null)
+    return h
+  }
+
+  // Several Highlights can overlap where the reader tapped; let them pick (ticket 08).
+  const highlightsRef = useRef(highlights)
+  highlightsRef.current = highlights
+  const onHighlightTap = useCallback((cfi: string, rect: DOMRect) => {
+    const all = highlightsRef.current
+    const overlapping = all.filter((h) => overlaps(h.cfiRange, cfi))
+    setTapped({
+      rect,
+      highlights: overlapping.length ? overlapping : all.filter((h) => h.cfiRange === cfi),
+    })
+  }, [])
+
+  const bookmarkHere = location?.cfi
+    ? bookmarks.find((b) => within(b.cfi, location.cfi))
+    : undefined
+  const toggleBookmark = () => {
+    if (!location?.cfi) return
+    if (bookmarkHere)
+      void syncEngine.record(profileId, {
+        kind: 'bookmark',
+        ...stripMeta(bookmarkHere),
+        deleted: true,
+      })
+    else
+      void syncEngine.record(profileId, {
+        kind: 'bookmark',
+        id: crypto.randomUUID(),
+        fileId,
+        cfi: collapse(location.cfi),
+        snippet: location.range?.toString().replace(/\s+/g, ' ').trim().slice(0, 140) ?? '',
+        deleted: false,
+      })
+  }
+
+  const entries = useMemo<AnnotationEntry[]>(
+    () =>
+      [
+        ...highlights.map(
+          (item): AnnotationEntry => ({ kind: 'highlight', item, cfi: item.cfiRange }),
+        ),
+        ...bookmarks.map((item): AnnotationEntry => ({ kind: 'bookmark', item, cfi: item.cfi })),
+      ].sort((a, b) => compare(collapse(a.cfi), collapse(b.cfi))),
+    [highlights, bookmarks],
+  )
+
+  // The export is built on the server, so push local changes first.
+  const exportHighlights = async () => {
+    await syncEngine.flush(profileId)
+    window.location.href = `/api/books/${bookId}/highlights.md`
+  }
+
+  const activeHighlight = tapped?.highlights.length === 1 ? tapped.highlights[0] : undefined
   const fraction = scrub ?? location?.fraction ?? initial?.fraction ?? 0
   const bar = 'absolute inset-x-0 z-10 flex items-center gap-2 px-3 transition-opacity duration-200'
+  const ghost = { color: theme.fg }
 
   return (
     <div
@@ -156,12 +252,98 @@ function Reader({
           file={file}
           lastLocation={initial?.cfi}
           prefs={prefs}
+          highlights={highlights}
           onReady={onReady}
           onRelocate={onRelocate}
           onTap={onTap}
+          onSelection={(sel) => {
+            setSelection(sel)
+            if (sel) setTapped(null)
+          }}
+          onHighlightTap={onHighlightTap}
           onError={(e) => setError(e.message)}
         />
       </div>
+
+      {selection && (
+        <FloatingBar rect={selection.rect}>
+          <ColourSwatches onPick={(colour) => createHighlight(selection, colour)} />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              const h = createHighlight(selection, 'yellow')
+              setNoteFor({ ...h, kind: 'highlight', profileId, hlc: '' })
+            }}
+          >
+            Note
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              void navigator.clipboard?.writeText(selection.text)
+              reader.current?.clearSelection()
+              setSelection(null)
+            }}
+          >
+            Copy
+          </Button>
+        </FloatingBar>
+      )}
+
+      {tapped && tapped.highlights.length > 1 && (
+        <HighlightPicker
+          rect={tapped.rect}
+          highlights={tapped.highlights}
+          onPick={(h) => setTapped({ rect: tapped.rect, highlights: [h] })}
+        />
+      )}
+
+      {tapped && activeHighlight && (
+        <FloatingBar rect={tapped.rect}>
+          <ColourSwatches
+            current={activeHighlight.colour}
+            onPick={(colour) => {
+              void saveHighlight({ ...stripMeta(activeHighlight), colour })
+              setTapped(null)
+            }}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setNoteFor(activeHighlight)
+              setTapped(null)
+            }}
+          >
+            {activeHighlight.note ? 'Edit note' : 'Note'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              void saveHighlight({ ...stripMeta(activeHighlight), deleted: true })
+              setTapped(null)
+            }}
+          >
+            Delete
+          </Button>
+        </FloatingBar>
+      )}
+
+      {noteFor && (
+        <NoteDialog
+          open
+          initial={noteFor.note ?? ''}
+          quote={noteFor.text}
+          onOpenChange={(open) => !open && setNoteFor(null)}
+          onSave={(note) => {
+            const latest = highlightsRef.current.find((h) => h.id === noteFor.id) ?? noteFor
+            void saveHighlight({ ...stripMeta(latest), note: note.trim() || null })
+          }}
+        />
+      )}
 
       {jumpOffer && (
         <div
@@ -202,12 +384,7 @@ function Reader({
         className={`${bar} top-0 h-12 pt-[env(safe-area-inset-top)] ${chrome ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
         style={{ background: theme.bg }}
       >
-        <Button
-          variant="ghost"
-          size="sm"
-          render={<Link to={`/books/${bookId}`} />}
-          style={{ color: theme.fg }}
-        >
+        <Button variant="ghost" size="sm" render={<Link to={`/books/${bookId}`} />} style={ghost}>
           ← Back
         </Button>
         <div className="min-w-0 flex-1 truncate text-center text-sm">
@@ -219,9 +396,23 @@ function Reader({
         <Button
           variant="ghost"
           size="sm"
+          onClick={toggleBookmark}
+          disabled={!location?.cfi}
+          aria-pressed={Boolean(bookmarkHere)}
+          aria-label={bookmarkHere ? 'Remove bookmark' : 'Bookmark this page'}
+          style={ghost}
+        >
+          {bookmarkHere ? '★' : '☆'}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setPanel('notes')} style={ghost}>
+          Notes
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setPanel('toc')}
           disabled={!toc.length}
-          style={{ color: theme.fg }}
+          style={ghost}
         >
           Contents
         </Button>
@@ -230,7 +421,7 @@ function Reader({
           size="sm"
           onClick={() => setPanel('aa')}
           aria-label="Text and layout"
-          style={{ color: theme.fg }}
+          style={ghost}
         >
           Aa
         </Button>
@@ -278,6 +469,24 @@ function Reader({
         </SheetPopup>
       </Sheet>
 
+      <Sheet open={panel === 'notes'} onOpenChange={(open) => setPanel(open ? 'notes' : null)}>
+        <SheetPopup side={isMobile ? 'bottom' : 'right'}>
+          <SheetHeader>
+            <SheetTitle>Highlights and bookmarks</SheetTitle>
+          </SheetHeader>
+          <SheetPanel>
+            <AnnotationsPanel
+              entries={entries}
+              onGo={(cfi) => {
+                setPanel(null)
+                reader.current?.goTo(cfi)
+              }}
+              onExport={exportHighlights}
+            />
+          </SheetPanel>
+        </SheetPopup>
+      </Sheet>
+
       <Sheet open={panel === 'aa'} onOpenChange={(open) => setPanel(open ? 'aa' : null)}>
         <SheetPopup side={isMobile ? 'bottom' : 'right'}>
           <SheetHeader>
@@ -289,6 +498,27 @@ function Reader({
         </SheetPopup>
       </Sheet>
     </div>
+  )
+}
+
+/** The fields a change carries; the stored Profile and timestamp are re-stamped on write. */
+function stripMeta<T extends { kind: string; profileId: string; hlc: string }>({
+  kind: _k,
+  profileId: _p,
+  hlc: _h,
+  ...rest
+}: T) {
+  return rest
+}
+
+/** Whether a point CFI falls inside a range CFI (both ends included). */
+function within(point: string, range: string): boolean {
+  return compare(point, collapse(range)) >= 0 && compare(point, collapse(range, true)) <= 0
+}
+
+function overlaps(a: string, b: string): boolean {
+  return (
+    compare(collapse(a), collapse(b, true)) <= 0 && compare(collapse(b), collapse(a, true)) <= 0
   )
 }
 

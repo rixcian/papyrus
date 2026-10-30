@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AnnotationStore } from './annotations'
 import { DeviceClock } from './clock'
 import { type ServerRecord, SyncEngine } from './engine'
 import { readLocalProgress } from './local-progress'
@@ -47,15 +48,18 @@ function setup(
       status,
     })
   })
-  const outbox = new Outbox(new IDBFactory())
+  const factory = new IDBFactory()
+  const outbox = new Outbox(factory)
+  const annotations = new AnnotationStore(factory)
   const engine = new SyncEngine({
     storage,
     outbox,
+    annotations,
     clock: new DeviceClock(storage),
     fetch: fetchMock as unknown as typeof fetch,
     debounceMs: 60_000,
   })
-  return { engine, outbox, storage, sent }
+  return { engine, outbox, annotations, storage, sent }
 }
 
 describe('SyncEngine', () => {
@@ -143,5 +147,56 @@ describe('SyncEngine', () => {
       fraction: 0.71,
     })
     expect(next.hlc > (reply[0] as ServerRecord).hlc).toBe(true)
+  })
+
+  it('stores Highlights locally at once, and keeps the newer of local and pulled', async () => {
+    const pulled: ServerRecord[] = []
+    const { engine, annotations } = setup(() => ({ records: pulled }))
+    const base = {
+      id: 'h1',
+      fileId: 'f1',
+      cfiRange: 'epubcfi(/6/4!/4,/1:0,/1:4)',
+      colour: 'yellow' as const,
+      text: 'spice',
+      note: null,
+      deleted: false,
+    }
+    const local = await engine.record('alice', { kind: 'highlight', ...base })
+    expect(await annotations.forFile('alice', 'f1')).toMatchObject([{ id: 'h1', colour: 'yellow' }])
+
+    pulled.push({
+      kind: 'highlight',
+      bookId: 'b1',
+      ...base,
+      colour: 'pink',
+      hlc: '0000000000001-0000-old',
+    })
+    await engine.flush('alice')
+    expect(await annotations.forFile('alice', 'f1')).toMatchObject([
+      { colour: 'yellow', hlc: local.hlc },
+    ])
+
+    pulled.splice(0, 1, {
+      kind: 'highlight',
+      bookId: 'b1',
+      ...base,
+      deleted: true,
+      hlc: `${String(Date.now() + 60_000).padStart(13, '0')}-0000-laptop`,
+    })
+    await engine.flush('alice')
+    expect(await annotations.forFile('alice', 'f1')).toMatchObject([{ deleted: true }])
+  })
+
+  it('never shows one Profile’s annotations to another', async () => {
+    const { engine, annotations } = setup()
+    await engine.record('alice', {
+      kind: 'bookmark',
+      id: 'b1',
+      fileId: 'f1',
+      cfi: 'epubcfi(/6/4!/4)',
+      snippet: 's',
+      deleted: false,
+    })
+    expect(await annotations.forFile('bob', 'f1')).toEqual([])
   })
 })

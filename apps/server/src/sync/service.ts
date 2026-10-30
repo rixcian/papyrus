@@ -1,7 +1,15 @@
 import { compareHlc, decodeHlc, isHlc } from '@papyrus/shared'
 import { and, eq, gt, inArray, sql } from 'drizzle-orm'
 import type { Db } from '../db/client.ts'
-import { books, counters, files, readingProgress, readStatus } from '../db/schema.ts'
+import {
+  bookmarks,
+  books,
+  counters,
+  files,
+  highlights,
+  readingProgress,
+  readStatus,
+} from '../db/schema.ts'
 
 export const READ_STATUSES = ['unread', 'reading', 'finished'] as const
 export type ReadStatus = (typeof READ_STATUSES)[number]
@@ -11,9 +19,31 @@ export const FINISHED_AT = 0.98
 /** Changes stamped further ahead than this are dropped, so a wrong clock can't win forever. */
 const MAX_CLOCK_LEAD_MS = 24 * 60 * 60 * 1000
 
+export interface BookmarkFields {
+  id: string
+  fileId: string
+  cfi: string
+  snippet: string
+  deleted: boolean
+  hlc: string
+}
+
+export interface HighlightFields {
+  id: string
+  fileId: string
+  cfiRange: string
+  colour: string
+  text: string
+  note: string | null
+  deleted: boolean
+  hlc: string
+}
+
 export type Change =
   | { kind: 'progress'; fileId: string; cfi: string; fraction: number; hlc: string }
   | { kind: 'readStatus'; bookId: string; status: ReadStatus; hlc: string }
+  | ({ kind: 'bookmark' } & BookmarkFields)
+  | ({ kind: 'highlight' } & HighlightFields)
 
 export type ServerRecord =
   | {
@@ -26,6 +56,8 @@ export type ServerRecord =
       hlc: string
     }
   | { kind: 'readStatus'; bookId: string; status: ReadStatus; hlc: string }
+  | ({ kind: 'bookmark'; bookId: string } & BookmarkFields)
+  | ({ kind: 'highlight'; bookId: string } & HighlightFields)
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
@@ -54,6 +86,8 @@ export class SyncService {
         if (change.kind === 'progress' && this.applyProgress(tx, profileId, deviceId, change))
           applied++
         if (change.kind === 'readStatus' && this.applyStatus(tx, profileId, change)) applied++
+        if (change.kind === 'bookmark' && this.applyBookmark(tx, profileId, change)) applied++
+        if (change.kind === 'highlight' && this.applyHighlight(tx, profileId, change)) applied++
       }
     })
     return { applied }
@@ -72,9 +106,47 @@ export class SyncService {
       .from(readStatus)
       .where(and(eq(readStatus.profileId, profileId), gt(readStatus.serverSeq, cursor)))
       .all()
+    const marks = this.db
+      .select({ b: bookmarks, bookId: files.bookId })
+      .from(bookmarks)
+      .innerJoin(files, eq(files.id, bookmarks.fileId))
+      .where(and(eq(bookmarks.profileId, profileId), gt(bookmarks.serverSeq, cursor)))
+      .all()
+    const lights = this.db
+      .select({ h: highlights, bookId: files.bookId })
+      .from(highlights)
+      .innerJoin(files, eq(files.id, highlights.fileId))
+      .where(and(eq(highlights.profileId, profileId), gt(highlights.serverSeq, cursor)))
+      .all()
     return {
       cursor: this.currentSeq(),
       records: [
+        ...marks.map(
+          ({ b, bookId }): ServerRecord => ({
+            kind: 'bookmark',
+            bookId,
+            id: b.id,
+            fileId: b.fileId,
+            cfi: b.cfi,
+            snippet: b.snippet,
+            deleted: b.deleted,
+            hlc: b.hlc,
+          }),
+        ),
+        ...lights.map(
+          ({ h, bookId }): ServerRecord => ({
+            kind: 'highlight',
+            bookId,
+            id: h.id,
+            fileId: h.fileId,
+            cfiRange: h.cfiRange,
+            colour: h.colour,
+            text: h.text,
+            note: h.note,
+            deleted: h.deleted,
+            hlc: h.hlc,
+          }),
+        ),
         ...progress.map(
           ({ p, bookId }): ServerRecord => ({
             kind: 'progress',
@@ -217,5 +289,73 @@ export class SyncService {
       .onConflictDoUpdate({ target: [readStatus.profileId, readStatus.bookId], set: row })
       .run()
     return true
+  }
+
+  /**
+   * Bookmarks and Highlights are keyed by a client id; an id that belongs to another
+   * Profile is never overwritten.
+   */
+  private applyBookmark(
+    tx: Tx,
+    profileId: string,
+    c: Extract<Change, { kind: 'bookmark' }>,
+  ): boolean {
+    if (!tx.select({ id: files.id }).from(files).where(eq(files.id, c.fileId)).get()) return false
+    const existing = tx.select().from(bookmarks).where(eq(bookmarks.id, c.id)).get()
+    if (existing && (existing.profileId !== profileId || compareHlc(existing.hlc, c.hlc) >= 0))
+      return false
+    const row = {
+      cfi: c.cfi,
+      snippet: c.snippet,
+      deleted: c.deleted,
+      hlc: c.hlc,
+      serverSeq: this.nextSeq(tx),
+    }
+    tx.insert(bookmarks)
+      .values({ id: c.id, profileId, fileId: c.fileId, ...row })
+      .onConflictDoUpdate({ target: bookmarks.id, set: row })
+      .run()
+    return true
+  }
+
+  private applyHighlight(
+    tx: Tx,
+    profileId: string,
+    c: Extract<Change, { kind: 'highlight' }>,
+  ): boolean {
+    if (!tx.select({ id: files.id }).from(files).where(eq(files.id, c.fileId)).get()) return false
+    const existing = tx.select().from(highlights).where(eq(highlights.id, c.id)).get()
+    if (existing && (existing.profileId !== profileId || compareHlc(existing.hlc, c.hlc) >= 0))
+      return false
+    const row = {
+      cfiRange: c.cfiRange,
+      colour: c.colour,
+      text: c.text,
+      note: c.note?.trim() ? c.note : null,
+      deleted: c.deleted,
+      hlc: c.hlc,
+      serverSeq: this.nextSeq(tx),
+    }
+    tx.insert(highlights)
+      .values({ id: c.id, profileId, fileId: c.fileId, ...row })
+      .onConflictDoUpdate({ target: highlights.id, set: row })
+      .run()
+    return true
+  }
+
+  /** A Profile's live Highlights on a Book's Files, for the Markdown export. */
+  highlightsForBook(profileId: string, bookId: string) {
+    return this.db
+      .select({ h: highlights, format: files.format, fileId: files.id })
+      .from(highlights)
+      .innerJoin(files, eq(files.id, highlights.fileId))
+      .where(
+        and(
+          eq(highlights.profileId, profileId),
+          eq(files.bookId, bookId),
+          eq(highlights.deleted, false),
+        ),
+      )
+      .all()
   }
 }

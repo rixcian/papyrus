@@ -76,6 +76,12 @@ function BookView({ book }: { book: BookDetail }) {
                 : 'Read'}
             </Button>
           )}
+          <Button
+            variant="outline"
+            render={<a href={`/api/books/${book.id}/highlights.md`} download />}
+          >
+            Export highlights
+          </Button>
           {book.owned && (
             <>
               <Button variant="outline" onClick={() => setEditing(true)}>

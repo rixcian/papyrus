@@ -1,4 +1,5 @@
 import type { FastifyPluginAsyncZod } from '@fastify/type-provider-zod'
+import { HIGHLIGHT_COLOURS, HIGHLIGHT_TEXT_MAX, NOTE_MAX } from '@papyrus/shared'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import type { Library } from '../books/library.ts'
@@ -6,12 +7,35 @@ import type { Db } from '../db/client.ts'
 import { profiles } from '../db/schema.ts'
 import { AppError } from '../errors.ts'
 import { requireProfile } from '../session.ts'
+import { exportFilename, highlightsMarkdown } from './export.ts'
 import { READ_STATUSES, type SyncService } from './service.ts'
 
 const ErrorBody = z.object({ error: z.string(), message: z.string() })
 const Status = z.enum(READ_STATUSES)
 
+const Id = z.string().min(8).max(64)
+const BookmarkBody = {
+  id: Id,
+  fileId: z.string(),
+  cfi: z.string().min(1).max(2000),
+  snippet: z.string().max(500),
+  deleted: z.boolean(),
+  hlc: z.string().max(200),
+}
+const HighlightBody = {
+  id: Id,
+  fileId: z.string(),
+  cfiRange: z.string().min(1).max(4000),
+  colour: z.enum(HIGHLIGHT_COLOURS),
+  text: z.string().max(HIGHLIGHT_TEXT_MAX),
+  note: z.string().max(NOTE_MAX).nullable(),
+  deleted: z.boolean(),
+  hlc: z.string().max(200),
+}
+
 const ChangeBody = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('bookmark'), ...BookmarkBody }),
+  z.object({ kind: z.literal('highlight'), ...HighlightBody }),
   z.object({
     kind: z.literal('progress'),
     fileId: z.string(),
@@ -28,6 +52,13 @@ const ChangeBody = z.discriminatedUnion('kind', [
 ])
 
 const RecordBody = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('bookmark'), bookId: z.string(), ...BookmarkBody }),
+  z.object({
+    kind: z.literal('highlight'),
+    bookId: z.string(),
+    ...HighlightBody,
+    colour: z.string(),
+  }),
   z.object({
     kind: z.literal('progress'),
     fileId: z.string(),
@@ -111,6 +142,34 @@ export function syncRoutes(db: Db, sync: SyncService, library: Library): Fastify
               : null,
             readStatus: sync.statusFor(request.profile.id, [book.id]).get(book.id) ?? 'unread',
           }
+        },
+      )
+
+      s.get(
+        '/api/books/:bookId/highlights.md',
+        { schema: { operationId: 'exportHighlights', params: z.object({ bookId: z.string() }) } },
+        async (request, reply) => {
+          const book = library.visibleBook(request.profile.id, request.params.bookId)
+          const authors = library.authorsOf([book.id]).get(book.id) ?? []
+          const rows = sync.highlightsForBook(request.profile.id, book.id)
+          const markdown = highlightsMarkdown(
+            book.title,
+            authors,
+            rows.map(({ h, format, fileId }) => ({
+              fileId,
+              format,
+              cfiRange: h.cfiRange,
+              text: h.text,
+              note: h.note,
+            })),
+          )
+          return reply
+            .type('text/markdown; charset=utf-8')
+            .header(
+              'Content-Disposition',
+              `attachment; filename*=UTF-8''${encodeURIComponent(exportFilename(book.title))}`,
+            )
+            .send(markdown)
         },
       )
     }

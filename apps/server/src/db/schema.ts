@@ -128,3 +128,52 @@ export const readStatus = sqliteTable(
     index('read_status_seq').on(t.profileId, t.serverSeq),
   ],
 )
+
+/** Ids come from the client, so records can be created offline (ticket 08). */
+export const bookmarks = sqliteTable(
+  'bookmarks',
+  {
+    id: text('id').primaryKey(),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    fileId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    cfi: text('cfi').notNull(),
+    snippet: text('snippet').notNull(),
+    /** Deletes are tombstones, kept so an offline device can't bring the record back. */
+    deleted: integer('deleted', { mode: 'boolean' }).notNull(),
+    hlc: text('hlc').notNull(),
+    serverSeq: integer('server_seq').notNull(),
+  },
+  (t) => [
+    index('bookmarks_file').on(t.profileId, t.fileId),
+    index('bookmarks_seq').on(t.profileId, t.serverSeq),
+  ],
+)
+
+export const highlights = sqliteTable(
+  'highlights',
+  {
+    id: text('id').primaryKey(),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    fileId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    cfiRange: text('cfi_range').notNull(),
+    colour: text('colour').notNull(),
+    text: text('text').notNull(),
+    /** At most one Note per Highlight, stored on it (GLOSSARY: Note). */
+    note: text('note'),
+    deleted: integer('deleted', { mode: 'boolean' }).notNull(),
+    hlc: text('hlc').notNull(),
+    serverSeq: integer('server_seq').notNull(),
+  },
+  (t) => [
+    index('highlights_file').on(t.profileId, t.fileId),
+    index('highlights_seq').on(t.profileId, t.serverSeq),
+  ],
+)

@@ -1,6 +1,14 @@
+import { AnnotationStore, type StoredAnnotation } from './annotations'
 import { DeviceClock } from './clock'
 import { writeLocalProgress } from './local-progress'
-import { type Change, Outbox, type OutboxEntry, type ReadStatus } from './outbox'
+import {
+  type BookmarkFields,
+  type Change,
+  type HighlightFields,
+  Outbox,
+  type OutboxEntry,
+  type ReadStatus,
+} from './outbox'
 
 export type ServerRecord =
   | {
@@ -13,13 +21,18 @@ export type ServerRecord =
       hlc: string
     }
   | { kind: 'readStatus'; bookId: string; status: ReadStatus; hlc: string }
+  | ({ kind: 'bookmark'; bookId: string; hlc: string } & BookmarkFields)
+  | ({ kind: 'highlight'; bookId: string; hlc: string } & HighlightFields)
 
 type ChangeInput =
   | { kind: 'progress'; fileId: string; cfi: string; fraction: number }
   | { kind: 'readStatus'; bookId: string; status: ReadStatus }
+  | ({ kind: 'bookmark' } & BookmarkFields)
+  | ({ kind: 'highlight' } & HighlightFields)
 
 export interface SyncEngineOptions {
   outbox?: Outbox
+  annotations?: AnnotationStore
   clock?: DeviceClock
   storage?: Storage
   fetch?: typeof fetch
@@ -35,6 +48,7 @@ const cursorKey = (profileId: string) => `papyrus:sync-cursor:${profileId}`
  */
 export class SyncEngine {
   readonly clock: DeviceClock
+  readonly annotations: AnnotationStore
   private readonly outbox: Outbox
   private readonly storage: Storage
   private readonly fetchImpl: typeof fetch
@@ -48,6 +62,7 @@ export class SyncEngine {
     this.storage = options.storage ?? localStorage
     this.clock = options.clock ?? new DeviceClock(this.storage)
     this.outbox = options.outbox ?? new Outbox()
+    this.annotations = options.annotations ?? new AnnotationStore()
     this.fetchImpl = options.fetch ?? ((...args) => fetch(...args))
     this.debounceMs = options.debounceMs ?? 2000
   }
@@ -72,6 +87,10 @@ export class SyncEngine {
         { cfi: change.cfi, fraction: change.fraction, hlc: change.hlc, deviceId: this.deviceId },
         this.storage,
       )
+    if (change.kind === 'bookmark' || change.kind === 'highlight') {
+      await this.annotations.put({ ...change, profileId } as StoredAnnotation)
+      this.notify(profileId, [])
+    }
     await this.outbox.put(profileId, change)
     this.schedule()
     return change
@@ -139,11 +158,11 @@ export class SyncEngine {
       const body = (await res.json()) as { cursor: number; records: ServerRecord[] }
       await this.outbox.acknowledge(sent)
       this.storage.setItem(cursorKey(profileId), String(body.cursor))
-      this.applyPulled(profileId, body.records)
+      await this.applyPulled(profileId, body.records)
     }
   }
 
-  private applyPulled(profileId: string, records: ServerRecord[]): void {
+  private async applyPulled(profileId: string, records: ServerRecord[]): Promise<void> {
     for (const r of records) {
       this.clock.observe(r.hlc)
       if (r.kind === 'progress')
@@ -153,7 +172,16 @@ export class SyncEngine {
           { cfi: r.cfi, fraction: r.fraction, hlc: r.hlc, deviceId: r.deviceId },
           this.storage,
         )
+      if (r.kind === 'bookmark' || r.kind === 'highlight') {
+        const { bookId: _bookId, ...fields } = r
+        await this.annotations.put({ ...fields, profileId } as StoredAnnotation)
+      }
     }
-    if (records.length) for (const listener of this.listeners) listener(profileId, records)
+    if (records.length) this.notify(profileId, records)
+  }
+
+  /** Pulled records, or none for a local change; either way views re-read their data. */
+  private notify(profileId: string, records: ServerRecord[]): void {
+    for (const listener of this.listeners) listener(profileId, records)
   }
 }
