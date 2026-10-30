@@ -6,6 +6,7 @@ import type { Db } from '../db/client.ts'
 import { type BookRow, bookAuthors, books, bookTags, profiles } from '../db/schema.ts'
 import { AppError, notFound } from '../errors.ts'
 import { requireProfile } from '../session.ts'
+import type { ShelfService } from '../shelves/service.ts'
 import { READ_STATUSES, type SyncService } from '../sync/service.ts'
 import type { BlobStore } from './blobs.ts'
 import { FILE_FORMATS, type FileFormat, READABLE_FORMATS } from './formats.ts'
@@ -66,6 +67,8 @@ const BookDetail = BookSummary.omit({ formats: true }).extend({
   hidden: z.boolean(),
   /** Who the Book is Shared with; only the Owning Profile sees this (ticket 06). */
   share: ShareBody.nullable(),
+  /** This Profile's shelves holding the Book. */
+  shelves: z.array(z.object({ id: z.string(), name: z.string() })),
   files: z.array(BookFile),
   updatedAt: z.number(),
 })
@@ -114,6 +117,7 @@ export interface BookRouteDeps {
   ingest: Ingest
   library: Library
   sync: SyncService
+  shelves: ShelfService
   maxUploadBytes: number
 }
 
@@ -123,6 +127,7 @@ export function bookRoutes({
   ingest,
   library,
   sync,
+  shelves,
   maxUploadBytes,
 }: BookRouteDeps): FastifyPluginAsyncZod {
   const search = new BookSearch(db)
@@ -159,6 +164,7 @@ export function bookRoutes({
       addedAt: library.addedAt(profileId, book.id) ?? book.addedAt,
       hidden: library.isHidden(profileId, book.id),
       share: book.ownerProfileId === profileId ? library.shareOf(book) : null,
+      shelves: shelves.shelvesOf(profileId, book.id),
       description: book.description,
       language: book.language,
       publisher: book.publisher,
@@ -219,6 +225,8 @@ export function bookRoutes({
             tag: z.string().optional(),
             sort: z.enum(BOOK_SORTS).optional(),
             scope: z.enum(BOOK_SCOPES).optional(),
+            /** A shelf of this Profile's. */
+            shelf: z.string().optional(),
             /** `true` lists the Shared Books this Profile has hidden instead. */
             hidden: z.stringbool().optional(),
             /** Opaque; pass back `nextCursor` for the next page. */

@@ -21,6 +21,8 @@ import { registerSecurityHeaders } from './plugins/security.ts'
 import { registerStatic } from './plugins/spa.ts'
 import { healthRoutes } from './routes/health.ts'
 import { profileRoutes } from './routes/profiles.ts'
+import { shelfRoutes } from './shelves/routes.ts'
+import { ShelfService } from './shelves/service.ts'
 import { syncRoutes } from './sync/routes.ts'
 import { SyncService } from './sync/service.ts'
 
@@ -65,13 +67,23 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
   const ingest = new Ingest(db, blobs, coversDir)
   const library = new Library(db, blobs, coversDir)
   const sync = new SyncService(db)
+  const shelves = new ShelfService(db, library)
 
   app.get('/api/openapi.json', { schema: { hide: true } }, async () => app.swagger())
   await app.register(healthRoutes)
   await app.register(profileRoutes(db, library))
   await app.register(
-    bookRoutes({ db, blobs, ingest, library, sync, maxUploadBytes: config.maxUploadBytes }),
+    bookRoutes({
+      db,
+      blobs,
+      ingest,
+      library,
+      sync,
+      shelves,
+      maxUploadBytes: config.maxUploadBytes,
+    }),
   )
+  await app.register(shelfRoutes(db, shelves))
 
   await app.register(syncRoutes(db, sync, library))
 

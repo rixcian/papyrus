@@ -4,6 +4,7 @@ import { BookCover } from '@/components/book-cover'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditBookDialog } from '@/components/edit-book-dialog'
 import { describeShare, ShareDialog } from '@/components/share-dialog'
+import { ShelvesMenu } from '@/components/shelves-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,7 +12,7 @@ import {
   type BookFile,
   formatSize,
   useBook,
-  useDeleteBook,
+  useDeleteBooks,
   useDeleteFile,
   useSetHidden,
   useSetReadStatus,
@@ -38,11 +39,11 @@ export function BookPage() {
 
 function BookView({ book }: { book: BookDetail }) {
   const navigate = useNavigate()
-  const deleteBook = useDeleteBook()
+  const deleteBook = useDeleteBooks()
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [sharing, setSharing] = useState(false)
-  const setHidden = useSetHidden(book.id)
+  const setHidden = useSetHidden()
 
   const lastRead =
     book.lastRead && book.files.find((f) => f.id === book.lastRead?.fileId && f.readable)
@@ -105,11 +106,16 @@ function BookView({ book }: { book: BookDetail }) {
               </Button>
             </>
           )}
+          <ShelvesMenu
+            bookIds={[book.id]}
+            onShelves={book.shelves.map((s) => s.id)}
+            trigger={<Button variant="outline">Shelves</Button>}
+          />
           {!book.owned && (
             <Button
               variant="outline"
               disabled={setHidden.isPending}
-              onClick={() => setHidden.mutate(!book.hidden)}
+              onClick={() => setHidden.mutate({ bookIds: [book.id], hidden: !book.hidden })}
             >
               {book.hidden ? 'Unhide' : 'Hide from my library'}
             </Button>
@@ -117,6 +123,20 @@ function BookView({ book }: { book: BookDetail }) {
         </div>
 
         <ReadStatusControl bookId={book.id} status={book.readStatus} />
+
+        {book.shelves.length > 0 && (
+          <p className="mt-3 text-muted-foreground text-sm">
+            On{' '}
+            {book.shelves.map((shelf, i) => (
+              <span key={shelf.id}>
+                {i > 0 && ', '}
+                <Link to={`/?shelf=${shelf.id}`} className="underline underline-offset-2">
+                  {shelf.name}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
 
         {book.tags.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-1.5">
@@ -153,8 +173,8 @@ function BookView({ book }: { book: BookDetail }) {
 
       {sharing && book.share && (
         <ShareDialog
-          bookId={book.id}
-          title={book.title}
+          bookIds={[book.id]}
+          title={`Share ${book.title}`}
           share={book.share}
           open={sharing}
           onOpenChange={setSharing}
@@ -168,7 +188,7 @@ function BookView({ book }: { book: BookDetail }) {
         description="It disappears for everyone it is Shared with, along with all reading progress and highlights on it. This can't be undone."
         confirmLabel="Delete Book"
         onConfirm={async () => {
-          await deleteBook.mutateAsync(book.id)
+          await deleteBook.mutateAsync([book.id])
           navigate('/', { replace: true })
         }}
       />

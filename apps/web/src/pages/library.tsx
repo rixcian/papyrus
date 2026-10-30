@@ -1,9 +1,15 @@
 import { LayoutGridIcon, ListIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { BookCover } from '@/components/book-cover'
-import { BookViews, type LibraryLayout } from '@/components/book-views'
+import {
+  BookViews,
+  type LibraryLayout,
+  type Selection,
+  SelectionContext,
+} from '@/components/book-views'
 import { LibraryFilters } from '@/components/library-filters'
+import { SelectionBar } from '@/components/selection-bar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
@@ -14,11 +20,13 @@ import { useUploads } from '@/components/uploads'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import {
   type BookSort,
+  type BookSummary,
   type LibraryQuery,
   useBookList,
   useContinueReading,
   useFacets,
 } from '@/lib/books'
+import { useShelves } from '@/lib/shelves'
 import type { ReadStatus } from '@/sync'
 
 const SORTS: { value: BookSort; label: string }[] = [
@@ -56,6 +64,7 @@ function useLibraryQuery(): [LibraryQuery, (patch: Partial<LibraryQuery>) => voi
     ...(get('tag') && { tag: get('tag') }),
     ...(isSort(sort) && { sort }),
     ...(isScope(scope) && { scope }),
+    ...(get('shelf') && { shelf: get('shelf') }),
     ...(params.get('hidden') === 'true' && { hidden: 'true' }),
   }
   const update = useCallback(
@@ -97,6 +106,30 @@ export function LibraryPage() {
   const list = useBookList(query)
   const continuing = useContinueReading()
   const hiddenCount = useFacets().data?.hidden ?? 0
+  const shelves = useShelves()
+  const shelfName = shelves.data?.find((s) => s.id === query.shelf)?.name
+  const [selected, setSelected] = useState<Map<string, BookSummary>>(() => new Map())
+  const clearSelection = useCallback(() => setSelected(new Map()), [])
+  const selection = useMemo<Selection>(
+    () => ({
+      selecting: selected.size > 0,
+      has: (id) => selected.has(id),
+      toggle: (book) =>
+        setSelected((prev) => {
+          const next = new Map(prev)
+          if (next.has(book.id)) next.delete(book.id)
+          else next.set(book.id, book)
+          return next
+        }),
+    }),
+    [selected],
+  )
+  useEffect(() => {
+    if (!selected.size) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && clearSelection()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected.size, clearSelection])
   const { addFiles } = useUploads()
   const input = useRef<HTMLInputElement>(null)
 
@@ -168,6 +201,7 @@ export function LibraryPage() {
       ['author', query.author],
       ['series', query.series],
       ['tag', query.tag],
+      ['shelf', query.shelf && (shelfName ?? 'Shelf')],
     ] as const
   ).filter(([, label]) => label)
   const sort = query.sort ?? (query.q ? 'relevance' : query.series ? 'series' : 'added')
@@ -268,16 +302,26 @@ export function LibraryPage() {
           {total === 0 ? (
             <p className="py-12 text-center text-muted-foreground text-sm">No Books match.</p>
           ) : (
-            <BookViews
-              books={books}
-              total={total}
-              layout={layout}
-              hasMore={hasNextPage}
-              loadMore={loadMore}
-            />
+            <SelectionContext.Provider value={selection}>
+              <BookViews
+                books={books}
+                total={total}
+                layout={layout}
+                hasMore={hasNextPage}
+                loadMore={loadMore}
+              />
+            </SelectionContext.Provider>
           )}
         </section>
       </div>
+
+      {selected.size > 0 && (
+        <SelectionBar
+          books={[...selected.values()]}
+          hiddenView={query.hidden === 'true'}
+          onClear={clearSelection}
+        />
+      )}
 
       {!wide && (
         <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>

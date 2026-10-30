@@ -15,6 +15,7 @@ export interface BookFilters {
   tag?: string | undefined
   /** Own Books, Books Shared with the Profile, or both (the default). */
   scope?: BookScope | undefined
+  shelf?: string | undefined
   /** Only the Shared Books the Profile has hidden, instead of its library. */
   hidden?: boolean | undefined
   /** Defaults to relevance with a query, series index within a series, else recently added. */
@@ -94,6 +95,11 @@ export class BookSearch {
     if (filters.series) {
       where.push('b.series_name = @series')
       params.series = filters.series
+    }
+    if (filters.shelf) {
+      where.push(`EXISTS (SELECT 1 FROM shelf_books sb JOIN shelves sh ON sh.id = sb.shelf_id
+        WHERE sb.book_id = b.id AND sh.id = @shelf AND sh.profile_id = @profileId)`)
+      params.shelf = filters.shelf
     }
     if (filters.tag) {
       where.push('EXISTS (SELECT 1 FROM book_tags WHERE book_id = b.id AND tag = @tag)')

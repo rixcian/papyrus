@@ -110,23 +110,38 @@ function useBookMutation<A, R>(fn: (args: A) => Promise<R>) {
 export type ShareState = NonNullable<BookDetail['share']>
 export type ShareMode = ShareState['mode']
 
-/** Only the Owning Profile can Share (ticket 06). */
-export function useShareBook(bookId: string) {
-  return useBookMutation(({ mode, profileIds }: { mode: ShareMode; profileIds: string[] }) =>
-    unwrap(
-      api.PUT('/api/books/{bookId}/share', {
-        params: { path: { bookId } },
-        body: { mode, profileIds },
-      }),
-    ),
+/**
+ * Only the Owning Profile can Share (ticket 06). Several Books at once for multi-select; the
+ * server takes one Book per request.
+ */
+export function useShareBooks() {
+  return useBookMutation(
+    ({ bookIds, mode, profileIds }: { bookIds: string[]; mode: ShareMode; profileIds: string[] }) =>
+      Promise.all(
+        bookIds.map((bookId) =>
+          unwrap(
+            api.PUT('/api/books/{bookId}/share', {
+              params: { path: { bookId } },
+              body: { mode, profileIds },
+            }),
+          ),
+        ),
+      ),
   )
 }
 
 /** A Recipient's "remove from my library", and undoing it. */
-export function useSetHidden(bookId: string) {
-  return useBookMutation((hidden: boolean) =>
-    unwrap(
-      api.PUT('/api/books/{bookId}/hidden', { params: { path: { bookId } }, body: { hidden } }),
+export function useSetHidden() {
+  return useBookMutation(({ bookIds, hidden }: { bookIds: string[]; hidden: boolean }) =>
+    Promise.all(
+      bookIds.map((bookId) =>
+        unwrap(
+          api.PUT('/api/books/{bookId}/hidden', {
+            params: { path: { bookId } },
+            body: { hidden },
+          }),
+        ),
+      ),
     ),
   )
 }
@@ -135,9 +150,13 @@ export function useUpdateBook(bookId: string) {
   return useBookMutation((body: BookPatch) => updateBook(bookId, body))
 }
 
-export function useDeleteBook() {
-  return useBookMutation((bookId: string) =>
-    unwrap(api.DELETE('/api/books/{bookId}', { params: { path: { bookId } } })),
+export function useDeleteBooks() {
+  return useBookMutation((bookIds: string[]) =>
+    Promise.all(
+      bookIds.map((bookId) =>
+        unwrap(api.DELETE('/api/books/{bookId}', { params: { path: { bookId } } })),
+      ),
+    ),
   )
 }
 

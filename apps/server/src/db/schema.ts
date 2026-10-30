@@ -1,4 +1,12 @@
-import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 
 export const profiles = sqliteTable('profiles', {
   id: text('id').primaryKey(),
@@ -99,6 +107,39 @@ export const hiddenBooks = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.profileId, t.bookId] })],
 )
+
+/** A Profile's own way to organise Books it can see, owned or Shared (ticket 06). */
+export const shelves = sqliteTable(
+  'shelves',
+  {
+    id: text('id').primaryKey(),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** Lowercased name; unique per Profile. */
+    nameKey: text('name_key').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('shelves_profile_name').on(t.profileId, t.nameKey)],
+)
+
+/** Kept when a Share is revoked, so the Book is back on the shelf if Shared again. */
+export const shelfBooks = sqliteTable(
+  'shelf_books',
+  {
+    shelfId: text('shelf_id')
+      .notNull()
+      .references(() => shelves.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    addedAt: integer('added_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.shelfId, t.bookId] }), index('shelf_books_book').on(t.bookId)],
+)
+
+export type ShelfRow = typeof shelves.$inferSelect
 
 export const files = sqliteTable(
   'files',

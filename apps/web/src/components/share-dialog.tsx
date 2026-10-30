@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Radio, RadioGroup } from '@/components/ui/radio-group'
-import { type ShareMode, type ShareState, useShareBook } from '@/lib/books'
+import { type ShareMode, type ShareState, useShareBooks } from '@/lib/books'
 import { useProfiles, useSession } from '@/lib/session'
 
 /** How the current Share reads on Book detail, for the Owning Profile only. */
@@ -25,17 +25,19 @@ export function describeShare(share: ShareState): string {
 
 /** Not shared, everyone (including Profiles added later), or named Profiles (ticket 06). */
 export function ShareDialog({
-  bookId,
+  bookIds,
   title,
   share,
   open,
   onOpenChange,
+  onSaved,
 }: {
-  bookId: string
+  bookIds: string[]
   title: string
   share: ShareState
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSaved?: () => void
 }) {
   const { data: me } = useSession()
   const profiles = useProfiles({ fresh: true })
@@ -43,14 +45,15 @@ export function ShareDialog({
   const [mode, setMode] = useState<ShareMode>(share.mode)
   const [named, setNamed] = useState(() => new Set(share.profiles.map((p) => p.id)))
   const [error, setError] = useState<string | null>(null)
-  const save = useShareBook(bookId)
+  const save = useShareBooks()
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     try {
-      await save.mutateAsync({ mode, profileIds: mode === 'named' ? [...named] : [] })
+      await save.mutateAsync({ bookIds, mode, profileIds: mode === 'named' ? [...named] : [] })
       onOpenChange(false)
+      onSaved?.()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Couldn’t save the Share')
     }
@@ -61,7 +64,7 @@ export function ShareDialog({
       <DialogPopup className="max-w-md">
         <form onSubmit={submit} className="contents">
           <DialogHeader>
-            <DialogTitle>Share {title}</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
               Profiles you Share with can read and download it. They can’t change or delete it.
             </DialogDescription>

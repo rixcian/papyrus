@@ -1,8 +1,10 @@
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { BookSummary } from '@/lib/books'
+import { cn } from '@/lib/utils'
 import { BookCover } from './book-cover'
+import { Checkbox } from './ui/checkbox'
 import { Skeleton } from './ui/skeleton'
 
 export type LibraryLayout = 'grid' | 'list'
@@ -138,12 +140,115 @@ function seriesLabel(book: BookSummary): string | undefined {
   return book.seriesIndex != null ? `${book.seriesName} #${book.seriesIndex}` : book.seriesName
 }
 
+/** Multi-select in the library (ticket 10); absent, cards are plain links. */
+export interface Selection {
+  selecting: boolean
+  has(bookId: string): boolean
+  toggle(book: BookSummary): void
+}
+
+export const SelectionContext = createContext<Selection | null>(null)
+
+const LONG_PRESS_MS = 500
+
+/**
+ * Selection behaviour for a card: in selection mode a click toggles instead of opening the
+ * Book, and a long press on touch starts selecting (ticket 10).
+ */
+function useSelectable(book: BookSummary) {
+  const selection = useContext(SelectionContext)
+  const timer = useRef<number | undefined>(undefined)
+  const origin = useRef<{ x: number; y: number } | null>(null)
+  const pressed = useRef(false)
+  const cancel = () => {
+    window.clearTimeout(timer.current)
+    timer.current = undefined
+    origin.current = null
+  }
+  if (!selection) return { selected: false, selecting: false, linkProps: {}, toggle: () => {} }
+  const toggle = () => selection.toggle(book)
+  return {
+    selected: selection.has(book.id),
+    selecting: selection.selecting,
+    toggle,
+    linkProps: {
+      onClick: (e: React.MouseEvent) => {
+        if (pressed.current) {
+          pressed.current = false
+          e.preventDefault()
+        } else if (selection.selecting) {
+          e.preventDefault()
+          toggle()
+        }
+      },
+      onPointerDown: (e: React.PointerEvent) => {
+        if (e.pointerType === 'mouse') return
+        pressed.current = false
+        origin.current = { x: e.clientX, y: e.clientY }
+        timer.current = window.setTimeout(() => {
+          pressed.current = true
+          navigator.vibrate?.(10)
+          toggle()
+        }, LONG_PRESS_MS)
+      },
+      onPointerMove: (e: React.PointerEvent) => {
+        const o = origin.current
+        if (o && Math.hypot(e.clientX - o.x, e.clientY - o.y) > 10) cancel()
+      },
+      onPointerUp: cancel,
+      onPointerCancel: cancel,
+      onContextMenu: (e: React.MouseEvent) => {
+        if (pressed.current || timer.current) e.preventDefault()
+      },
+    },
+  }
+}
+
+function SelectBox({
+  book,
+  selected,
+  selecting,
+  toggle,
+  className,
+}: {
+  book: BookSummary
+  selected: boolean
+  selecting: boolean
+  toggle: () => void
+  className?: string
+}) {
+  return (
+    <Checkbox
+      checked={selected}
+      onCheckedChange={toggle}
+      aria-label={`Select ${book.title}`}
+      className={cn(
+        'bg-background',
+        // Desktop shows it on hover; touch starts selecting with a long press instead.
+        !selecting &&
+          'opacity-0 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:hidden',
+        className,
+      )}
+    />
+  )
+}
+
 function BookCard({ book }: { book: BookSummary }) {
   const series = seriesLabel(book)
+  const { selected, selecting, toggle, linkProps } = useSelectable(book)
   return (
-    <li>
-      <Link to={`/books/${book.id}`} className="flex flex-col gap-2 rounded-lg outline-offset-4">
-        <BookCover title={book.title} coverUrl={book.coverUrl} progress={progressOf(book)} />
+    <li className="group relative">
+      <Link
+        to={`/books/${book.id}`}
+        className="flex select-none flex-col gap-2 rounded-lg outline-offset-4 [-webkit-touch-callout:none]"
+        {...linkProps}
+      >
+        <BookCover
+          title={book.title}
+          coverUrl={book.coverUrl}
+          progress={progressOf(book)}
+          className={cn(selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}
+        />
         <div className="min-w-0">
           <div className="line-clamp-2 font-medium text-sm leading-snug">{book.title}</div>
           {book.authors.length > 0 && (
@@ -155,6 +260,13 @@ function BookCard({ book }: { book: BookSummary }) {
           )}
         </div>
       </Link>
+      <SelectBox
+        book={book}
+        selected={selected}
+        selecting={selecting}
+        toggle={toggle}
+        className="absolute start-2 top-2"
+      />
     </li>
   )
 }
@@ -162,11 +274,23 @@ function BookCard({ book }: { book: BookSummary }) {
 function BookRow({ book }: { book: BookSummary }) {
   const series = seriesLabel(book)
   const progress = progressOf(book)
+  const { selected, selecting, toggle, linkProps } = useSelectable(book)
   return (
-    <li>
+    <li className="group flex items-center gap-1">
+      <SelectBox
+        book={book}
+        selected={selected}
+        selecting={selecting}
+        toggle={toggle}
+        className="ms-2 pointer-coarse:ms-0"
+      />
       <Link
         to={`/books/${book.id}`}
-        className="flex h-18 items-center gap-3 rounded-md px-2 hover:bg-accent"
+        className={cn(
+          'flex h-18 min-w-0 flex-1 select-none items-center gap-3 rounded-md px-2 hover:bg-accent [-webkit-touch-callout:none]',
+          selected && 'bg-accent',
+        )}
+        {...linkProps}
       >
         <BookCover
           title=""
