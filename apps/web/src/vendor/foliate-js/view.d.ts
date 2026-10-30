@@ -48,7 +48,34 @@ export interface ShowAnnotationDetail {
   range: Range
 }
 
+export interface SearchExcerpt {
+  pre: string
+  match: string
+  post: string
+}
+
+export interface SearchMatch {
+  cfi: string
+  excerpt: SearchExcerpt
+}
+
+/** What `View.search` yields: progress through the sections, a section's matches, then 'done'. */
+export type SearchEvent = { progress: number } | { label: string; subitems: SearchMatch[] } | 'done'
+
+export interface SearchOptions {
+  query: string
+  /** Search one section only. */
+  index?: number
+  matchCase?: boolean
+  matchDiacritics?: boolean
+  matchWholeWords?: boolean
+  draw?: import('./overlayer.js').DrawFunction
+  drawOptions?: Record<string, unknown>
+}
+
 export declare class View extends HTMLElement {
+  search(opts: SearchOptions): AsyncGenerator<SearchEvent>
+  clearSearch(): void
   addAnnotation(annotation: Annotation, remove?: boolean): Promise<unknown>
   deleteAnnotation(annotation: Annotation): Promise<unknown>
   getCFI(index: number, range: Range): string

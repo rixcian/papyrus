@@ -1,5 +1,6 @@
 import { compareHlc, type HighlightColour } from '@papyrus/shared'
 import { useQuery } from '@tanstack/react-query'
+import { SearchIcon } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
@@ -16,6 +17,7 @@ import {
   HighlightPicker,
   NoteDialog,
 } from '@/reader/annotation-ui'
+import { SearchPanel, useBookSearch } from '@/reader/book-search'
 import {
   type BookSelection,
   FoliateReader,
@@ -125,12 +127,13 @@ function Reader({
   const [location, setLocation] = useState<RelocateDetail | null>(null)
   const [scrub, setScrub] = useState<number | null>(null)
   const [chrome, setChrome] = useState(true)
-  const [panel, setPanel] = useState<'toc' | 'aa' | 'notes' | null>(null)
+  const [panel, setPanel] = useState<'toc' | 'aa' | 'notes' | 'search' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selection, setSelection] = useState<BookSelection | null>(null)
   const [tapped, setTapped] = useState<{ rect: DOMRect; highlights: Highlight[] } | null>(null)
   const [noteFor, setNoteFor] = useState<Highlight | null>(null)
   const { highlights, bookmarks } = useAnnotations(profileId, fileId)
+  const search = useBookSearch(reader)
   const isMobile = useIsMobile()
   const theme = READER_THEMES[prefs.theme]
 
@@ -274,6 +277,7 @@ function Reader({
             if (sel) setTapped(null)
           }}
           onHighlightTap={onHighlightTap}
+          onFind={() => setPanel('search')}
           onError={(e) => setError(e.message)}
         />
       </div>
@@ -416,6 +420,15 @@ function Reader({
         >
           {bookmarkHere ? '★' : '☆'}
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setPanel('search')}
+          aria-label="Search in book"
+          style={ghost}
+        >
+          <SearchIcon />
+        </Button>
         <Button variant="ghost" size="sm" onClick={() => setPanel('notes')} style={ghost}>
           Notes
         </Button>
@@ -503,6 +516,26 @@ function Reader({
                       deleted: true,
                     }))
               }
+            />
+          </SheetPanel>
+        </SheetPopup>
+      </Sheet>
+
+      <Sheet open={panel === 'search'} onOpenChange={(open) => setPanel(open ? 'search' : null)}>
+        <SheetPopup side={isMobile ? 'bottom' : 'right'}>
+          <SheetHeader>
+            <SheetTitle>Search</SheetTitle>
+          </SheetHeader>
+          <SheetPanel>
+            <SearchPanel
+              state={search.state}
+              onSearch={search.start}
+              onCancel={search.cancel}
+              onClear={search.clear}
+              onPick={(cfi) => {
+                reader.current?.goTo(cfi)
+                setPanel(null)
+              }}
             />
           </SheetPanel>
         </SheetPopup>

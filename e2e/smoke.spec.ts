@@ -57,6 +57,16 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await expect(page.locator('header').getByText('Chapter One')).toBeVisible({ timeout: 15_000 })
   await page.screenshot({ path: 'test-results/reader.png' })
 
+  // In-book search streams results; picking one goes there (ticket 12).
+  await page.getByRole('button', { name: 'Search in book' }).click()
+  await page.getByRole('searchbox', { name: 'Search in this book' }).fill('of chapter two')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('status')).toHaveText('40 results')
+  await page.screenshot({ path: 'test-results/reader-search.png' })
+  await page.getByRole('button', { name: /Paragraph 3 of Chapter Two/ }).click()
+  await expect(page.locator('header').getByText('Chapter Two')).toBeVisible()
+  await page.screenshot({ path: 'test-results/reader-search-match.png' })
+
   // The jump is recorded, and the outbox flushes after a quiet period (ticket 08).
   const synced = waitForSyncWithChanges(page)
   await page.getByRole('button', { name: 'Contents' }).click()

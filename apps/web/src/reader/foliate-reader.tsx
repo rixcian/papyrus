@@ -4,12 +4,15 @@ import type {
   DrawAnnotationDetail,
   LoadDetail,
   RelocateDetail,
+  SearchEvent,
   ShowAnnotationDetail,
   TocItem,
   View,
 } from '@/vendor/foliate-js/view.js'
 import { bookCss, MARGINS, type ReaderPrefs } from './prefs'
 import { HIGHLIGHT_FILL } from './use-annotations'
+
+const SEARCH_OUTLINE = 'rgb(234 88 12 / 0.8)'
 
 export type TapZone = 'left' | 'center' | 'right'
 
@@ -26,6 +29,9 @@ export interface FoliateReaderHandle {
   goLeft(): void
   goRight(): void
   clearSelection(): void
+  /** Searches the whole book; matches are outlined on the page until `clearSearch`. */
+  search(query: string): AsyncGenerator<SearchEvent>
+  clearSearch(): void
 }
 
 interface Props {
@@ -38,6 +44,8 @@ interface Props {
   onTap(zone: TapZone): void
   onSelection(selection: BookSelection | null): void
   onHighlightTap(cfi: string, rect: DOMRect): void
+  /** Ctrl/Cmd+F, also while focus is inside the book's own frame. */
+  onFind(): void
   onError(error: Error): void
 }
 
@@ -83,6 +91,11 @@ export const FoliateReader = forwardRef<FoliateReaderHandle, Props>(
       clearSelection: () => {
         for (const doc of docs.current) doc.getSelection()?.removeAllRanges()
       },
+      search: async function* (query) {
+        const view = viewRef.current
+        if (view) yield* view.search({ query, drawOptions: { color: SEARCH_OUTLINE } })
+      },
+      clearSearch: () => viewRef.current?.clearSearch(),
     }))
 
     useEffect(() => {
@@ -94,6 +107,10 @@ export const FoliateReader = forwardRef<FoliateReaderHandle, Props>(
 
       const onKey = (e: KeyboardEvent) => {
         const v = viewRef.current
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+          e.preventDefault()
+          return latest.current.onFind()
+        }
         if (!v || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return
         const paginated = latest.current.prefs.flow === 'paginated'
         if (e.key === 'ArrowLeft') void v.goLeft()
