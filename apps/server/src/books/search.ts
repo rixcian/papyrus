@@ -7,6 +7,8 @@ export type BookSort = (typeof BOOK_SORTS)[number]
 export const BOOK_SCOPES = ['all', 'mine', 'shared'] as const
 export type BookScope = (typeof BOOK_SCOPES)[number]
 
+const HAS_AUDIO_SQL = "EXISTS (SELECT 1 FROM files f WHERE f.book_id = b.id AND f.format = 'audio')"
+
 export interface BookFilters {
   q?: string | undefined
   status?: ReadStatus | undefined
@@ -18,6 +20,8 @@ export interface BookFilters {
   shelf?: string | undefined
   /** Only the Shared Books the Profile has hidden, instead of its library. */
   hidden?: boolean | undefined
+  /** Only Books with an Audio File. */
+  audio?: boolean | undefined
   /** Defaults to relevance with a query, series index within a series, else recently added. */
   sort?: BookSort | undefined
   offset?: number | undefined
@@ -96,6 +100,7 @@ export class BookSearch {
       where.push('b.series_name = @series')
       params.series = filters.series
     }
+    if (filters.audio) where.push(HAS_AUDIO_SQL)
     if (filters.shelf) {
       where.push(`EXISTS (SELECT 1 FROM shelf_books sb JOIN shelves sh ON sh.id = sb.shelf_id
         WHERE sb.book_id = b.id AND sh.id = @shelf AND sh.profile_id = @profileId)`)
@@ -136,6 +141,7 @@ export class BookSearch {
     tags: Facet[]
     shared: number
     hidden: number
+    audio: number
   } {
     const client = this.db.$client
     const facet = (sql: string) =>
@@ -151,6 +157,7 @@ export class BookSearch {
     return {
       shared: count(`${IN_LIBRARY_SQL} AND b.owner_profile_id <> @profileId`),
       hidden: count(`${VISIBLE_SQL} AND ${HIDDEN_SQL}`),
+      audio: count(`${IN_LIBRARY_SQL} AND ${HAS_AUDIO_SQL}`),
       authors: facet(`SELECT a.name AS name, count(DISTINCT b.id) AS count
         FROM book_authors a JOIN books b ON b.id = a.book_id WHERE ${IN_LIBRARY_SQL}`),
       series: facet(`SELECT b.series_name AS name, count(*) AS count

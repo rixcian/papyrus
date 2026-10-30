@@ -1,8 +1,10 @@
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
+import { HeadphonesIcon } from 'lucide-react'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import type { BookSummary } from '@/lib/books'
 import { cn } from '@/lib/utils'
+import { formatLength } from '@/player/timeline'
 import { BookCover } from './book-cover'
 import { Checkbox } from './ui/checkbox'
 import { Skeleton } from './ui/skeleton'
@@ -135,6 +137,14 @@ export function BookViews({
 const progressOf = (book: BookSummary) =>
   book.readStatus === 'reading' ? book.lastRead?.fraction : undefined
 
+/** Percent read, or for an audiobook the time left: "3 h 05 m left". */
+export function progressLabel(book: BookSummary, fraction: number): string {
+  const { lastRead } = book
+  if (lastRead?.kind === 'audio' && lastRead.duration)
+    return `${formatLength((1 - fraction) * lastRead.duration)} left`
+  return `${Math.round(fraction * 100)}%`
+}
+
 function seriesLabel(book: BookSummary): string | undefined {
   if (!book.seriesName) return undefined
   return book.seriesIndex != null ? `${book.seriesName} #${book.seriesIndex}` : book.seriesName
@@ -247,6 +257,7 @@ function BookCard({ book }: { book: BookSummary }) {
           title={book.title}
           coverUrl={book.coverUrl}
           progress={progressOf(book)}
+          audio={book.formats.includes('audio')}
           className={cn(selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}
         />
         <div className="min-w-0">
@@ -298,7 +309,16 @@ function BookRow({ book }: { book: BookSummary }) {
           className="w-10 shrink-0 rounded-sm shadow-none"
         />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-sm">{book.title}</div>
+          <div className="flex items-center gap-1.5 truncate font-medium text-sm">
+            <span className="truncate">{book.title}</span>
+            {book.formats.includes('audio') && (
+              <HeadphonesIcon
+                role="img"
+                aria-label="Has audiobook"
+                className="size-3.5 shrink-0 text-muted-foreground"
+              />
+            )}
+          </div>
           <div className="truncate text-muted-foreground text-xs">
             {[book.authors.join(', '), series, book.sharedBy && `Shared by ${book.sharedBy}`]
               .filter(Boolean)
@@ -309,7 +329,7 @@ function BookRow({ book }: { book: BookSummary }) {
           {book.readStatus === 'finished'
             ? 'Finished'
             : progress !== undefined
-              ? `${Math.round(progress * 100)}%`
+              ? progressLabel(book, progress)
               : null}
         </div>
       </Link>

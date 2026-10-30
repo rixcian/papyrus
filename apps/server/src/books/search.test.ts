@@ -151,6 +151,7 @@ describe('library search', () => {
       tags: [],
       shared: 0,
       hidden: 0,
+      audio: 0,
     })
     expect((await list(device, { q: 'dune' })).total).toBe(1)
   })

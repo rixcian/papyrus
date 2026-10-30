@@ -351,6 +351,8 @@ export function bookRoutes({
             shelf: z.string().optional(),
             /** `true` lists the Shared Books this Profile has hidden instead. */
             hidden: z.stringbool().optional(),
+            /** `true` lists only Books with an Audio File. */
+            audio: z.stringbool().optional(),
             /** Opaque; pass back `nextCursor` for the next page. */
             cursor: z.string().regex(/^\d+$/).optional(),
             limit: z.coerce.number().int().min(1).max(200).default(60),
@@ -423,6 +425,8 @@ export function bookRoutes({
               /** Books Shared with this Profile in its library, and Books it has hidden. */
               shared: z.number(),
               hidden: z.number(),
+              /** Books with an Audio File. */
+              audio: z.number(),
             }),
           },
         },

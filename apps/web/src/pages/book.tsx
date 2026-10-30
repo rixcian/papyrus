@@ -131,12 +131,14 @@ function BookView({ book }: { book: BookDetail }) {
               {timeLeft ? `Listen · ${timeLeft} left` : 'Listen'}
             </Button>
           )}
-          <Button
-            variant="outline"
-            render={<a href={`/api/books/${book.id}/highlights.md`} download />}
-          >
-            Export highlights
-          </Button>
+          {readable && (
+            <Button
+              variant="outline"
+              render={<a href={`/api/books/${book.id}/highlights.md`} download />}
+            >
+              Export highlights
+            </Button>
+          )}
           {book.owned && (
             <>
               <Button variant="outline" onClick={() => setEditing(true)}>
@@ -221,7 +223,12 @@ function BookView({ book }: { book: BookDetail }) {
         <h2 className="mt-8 mb-2 font-semibold">Files</h2>
         <ul className="divide-y rounded-xl border">
           {book.files.map((file) => (
-            <FileRow key={file.id} file={file} canReshape={book.owned && book.files.length > 1} />
+            <FileRow
+              key={file.id}
+              file={file}
+              canReshape={book.owned && book.files.length > 1}
+              fraction={book.lastRead?.fileId === file.id ? book.lastRead.fraction : undefined}
+            />
           ))}
         </ul>
       </div>
@@ -347,7 +354,16 @@ function preferredReadable(files: BookFile[]): BookFile | undefined {
 }
 
 /** `canReshape`: the owner may remove or split off this File, as it isn't the only one. */
-function FileRow({ file, canReshape }: { file: BookFile; canReshape: boolean }) {
+function FileRow({
+  file,
+  canReshape,
+  fraction,
+}: {
+  file: BookFile
+  canReshape: boolean
+  /** How far this Profile got, when this is the File it used last. */
+  fraction?: number | undefined
+}) {
   const deleteFile = useDeleteFile()
   const splitFile = useSplitFile()
   const navigate = useNavigate()
@@ -356,11 +372,30 @@ function FileRow({ file, canReshape }: { file: BookFile; canReshape: boolean }) 
 
   return (
     <li className="flex items-center gap-3 px-3 py-2.5 text-sm">
-      <Badge variant="outline" className="uppercase">
-        {file.format}
+      <Badge variant="outline" className={file.kind === 'audio' ? undefined : 'uppercase'}>
+        {file.kind === 'audio' ? 'Audiobook' : file.format}
       </Badge>
-      <span className="min-w-0 flex-1 truncate">{file.originalName}</span>
+      {file.kind === 'audio' ? (
+        <span className="min-w-0 flex-1 truncate">
+          {[
+            file.duration ? formatLength(file.duration) : null,
+            file.trackCount > 1 ? `${file.trackCount} Tracks` : null,
+            fraction !== undefined && file.duration
+              ? `${formatLength((1 - fraction) * file.duration)} left`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{file.originalName}</span>
+      )}
       <span className="text-muted-foreground tabular-nums">{formatSize(file.size)}</span>
+      {file.kind === 'audio' && (
+        <Button variant="ghost" size="sm" render={<Link to={`/listen/${file.id}`} />}>
+          Listen
+        </Button>
+      )}
       {file.readable && (
         <Button variant="ghost" size="sm" render={<Link to={`/read/${file.id}`} />}>
           Read
@@ -382,7 +417,7 @@ function FileRow({ file, canReshape }: { file: BookFile; canReshape: boolean }) 
       <ConfirmDialog
         open={splitting}
         onOpenChange={setSplitting}
-        title={`Split ${file.originalName} into a new Book?`}
+        title={`Split ${file.kind === 'audio' ? 'the audiobook' : file.originalName} into a new Book?`}
         description="It becomes a Book of its own, with the details read from the File. Reading progress, highlights, shelves and Shares come along."
         confirmLabel="Split into new Book"
         destructive={false}
@@ -394,7 +429,7 @@ function FileRow({ file, canReshape }: { file: BookFile; canReshape: boolean }) 
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
-        title={`Remove ${file.originalName}?`}
+        title={`Remove ${file.kind === 'audio' ? 'the audiobook' : file.originalName}?`}
         description="Reading progress and highlights on this File will be lost for everyone it's Shared with."
         confirmLabel="Remove File"
         onConfirm={() => deleteFile.mutateAsync(file.id)}

@@ -358,3 +358,22 @@ async function readZip(buffer: Buffer) {
   })
   return entries
 }
+
+describe('audio in the library', () => {
+  it('filters to Books with audio and counts them', async () => {
+    const device = await setup()
+    await uploadAudio(device, QUIET_SHORE)
+    await device.request({
+      method: 'POST',
+      url: '/api/uploads',
+      ...multipart(
+        'other.epub',
+        await buildEpub({ metadata: '<dc:title>Other</dc:title><dc:creator>X</dc:creator>' }),
+      ),
+    })
+    const list = (await device.request({ url: '/api/books?audio=true' })).json()
+    expect(list.books.map((b: { title: string }) => b.title)).toEqual(['The Quiet Shore'])
+    expect(list.books[0].formats).toEqual(['audio'])
+    expect((await device.request({ url: '/api/books/facets' })).json().audio).toBe(1)
+  })
+})

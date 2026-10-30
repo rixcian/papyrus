@@ -5,6 +5,7 @@ import { BookCover } from '@/components/book-cover'
 import {
   BookViews,
   type LibraryLayout,
+  progressLabel,
   type Selection,
   SelectionContext,
 } from '@/components/book-views'
@@ -69,6 +70,7 @@ function useLibraryQuery(): [LibraryQuery, (patch: Partial<LibraryQuery>) => voi
     ...(isScope(scope) && { scope }),
     ...(get('shelf') && { shelf: get('shelf') }),
     ...(params.get('hidden') === 'true' && { hidden: 'true' }),
+    ...(params.get('audio') === 'true' && { audio: 'true' }),
   }
   const update = useCallback(
     (patch: Partial<LibraryQuery>) =>
@@ -205,6 +207,7 @@ export function LibraryPage() {
     [
       ['scope', query.scope && SCOPE_LABELS[query.scope]],
       ['hidden', query.hidden && 'Hidden'],
+      ['audio', query.audio && 'Has audio'],
       ['status', query.status && STATUS_LABELS[query.status]],
       ['author', query.author],
       ['series', query.series],
@@ -230,8 +233,14 @@ export function LibraryPage() {
                     title={book.title}
                     coverUrl={book.coverUrl}
                     progress={book.lastRead?.fraction}
+                    audio={book.lastRead?.kind === 'audio'}
                   />
                   <span className="line-clamp-2 text-xs leading-snug">{book.title}</span>
+                  {book.lastRead?.kind === 'audio' && (
+                    <span className="text-muted-foreground text-xs">
+                      {progressLabel(book, book.lastRead.fraction)}
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}

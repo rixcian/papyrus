@@ -90,6 +90,21 @@ export function LibraryFilters({
           ))}
         </ul>
       </section>
+      {(facets.data?.audio || query.audio) && (
+        <section>
+          <h2 className="mb-1.5 px-2 font-medium text-muted-foreground text-xs">Format</h2>
+          <ul>
+            <li>
+              <FilterButton
+                selected={query.audio === 'true'}
+                onClick={() => onChange({ audio: query.audio ? undefined : 'true' })}
+              >
+                Has audio
+              </FilterButton>
+            </li>
+          </ul>
+        </section>
+      )}
       <ShelfList selected={query.shelf} onSelect={(shelf) => onChange({ shelf })} />
       {facets.data && (
         <>

@@ -842,6 +842,7 @@ export interface operations {
                 scope?: "all" | "mine" | "shared";
                 shelf?: string;
                 hidden?: string;
+                audio?: string;
                 cursor?: string;
                 limit?: number;
             };
@@ -917,6 +918,7 @@ export interface operations {
                         }[];
                         shared: number;
                         hidden: number;
+                        audio: number;
                     };
                 };
             };

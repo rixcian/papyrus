@@ -689,6 +689,14 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "audio",
+            "required": false
+          },
+          {
+            "schema": {
               "type": "string",
               "pattern": "^\\d+$"
             },
@@ -890,9 +898,12 @@
                     },
                     "hidden": {
                       "type": "number"
+                    },
+                    "audio": {
+                      "type": "number"
                     }
                   },
-                  "required": ["authors", "series", "tags", "shared", "hidden"],
+                  "required": ["authors", "series", "tags", "shared", "hidden", "audio"],
                   "additionalProperties": false
                 }
               }
