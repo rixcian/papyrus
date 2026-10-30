@@ -1,6 +1,8 @@
 import { compareHlc } from '@papyrus/shared'
 import { useQuery } from '@tanstack/react-query'
 import {
+  BookmarkIcon,
+  BookmarkPlusIcon,
   ChevronDownIcon,
   ListIcon,
   MoonIcon,
@@ -10,8 +12,9 @@ import {
   RotateCwIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  Trash2Icon,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
 import { BookCover } from '@/components/book-cover'
@@ -34,7 +37,15 @@ import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
 import { type PlayerItem, SKIP_BACK, SKIP_FORWARD, SPEEDS } from '@/player/player'
 import { usePlayer, usePlayerState } from '@/player/provider'
-import { chapterAt, formatClock, parseAudioLocation, resumeTime } from '@/player/timeline'
+import {
+  audioLocation,
+  chapterAt,
+  formatClock,
+  parseAudioLocation,
+  resumeTime,
+} from '@/player/timeline'
+import { useAnnotations } from '@/reader/use-annotations'
+import { syncEngine } from '@/sync'
 import { readLocalProgress } from '@/sync/local-progress'
 
 const SLEEP_MINUTES = [5, 10, 15, 30, 45, 60, 90, 120]
@@ -114,7 +125,38 @@ function FullPlayer({ item }: { item: PlayerItem }) {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [scrub, setScrub] = useState<number | null>(null)
-  const [chaptersOpen, setChaptersOpen] = useState(false)
+  const [panel, setPanel] = useState<'chapters' | 'bookmarks' | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const { bookmarks: stored } = useAnnotations(item.profileId, item.fileId)
+  const bookmarks = useMemo(
+    () =>
+      stored
+        .map((b) => ({ bookmark: b, time: parseAudioLocation(b.cfi) }))
+        .filter((b): b is typeof b & { time: number } => b.time !== undefined)
+        .sort((a, b) => a.time - b.time),
+    [stored],
+  )
+
+  useEffect(() => {
+    if (!notice) return
+    const id = setTimeout(() => setNotice(null), 2500)
+    return () => clearTimeout(id)
+  }, [notice])
+
+  // A Bookmark is a Chapter and a time; Highlights and Notes don't apply to audio.
+  const addBookmark = () => {
+    const at = player.getState().time
+    const title = item.chapters[chapterAt(item.chapters, at)]?.title ?? item.title
+    void syncEngine.record(item.profileId, {
+      kind: 'bookmark',
+      id: crypto.randomUUID(),
+      fileId: item.fileId,
+      cfi: audioLocation(at),
+      snippet: `${title} · ${formatClock(at)}`.slice(0, 140),
+      deleted: false,
+    })
+    setNotice(`Bookmarked ${formatClock(at)}`)
+  }
   const shown = scrub ?? time
   const chapterIndex = chapterAt(item.chapters, shown)
   const chapter = item.chapters[chapterIndex]
@@ -152,12 +194,23 @@ function FullPlayer({ item }: { item: PlayerItem }) {
         >
           {item.title}
         </Link>
+        <Button variant="ghost" size="icon" aria-label="Add bookmark" onClick={addBookmark}>
+          <BookmarkPlusIcon />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Bookmarks"
+          onClick={() => setPanel('bookmarks')}
+        >
+          <BookmarkIcon />
+        </Button>
         <Button
           variant="ghost"
           size="icon"
           aria-label="Chapters"
           disabled={!item.chapters.length}
-          onClick={() => setChaptersOpen(true)}
+          onClick={() => setPanel('chapters')}
         >
           <ListIcon />
         </Button>
@@ -247,7 +300,7 @@ function FullPlayer({ item }: { item: PlayerItem }) {
             error ? 'text-destructive' : 'text-muted-foreground',
           )}
         >
-          {error ?? (waiting && playing ? 'Loading…' : '')}
+          {error ?? notice ?? (waiting && playing ? 'Loading…' : '')}
         </p>
 
         <div className="flex items-center justify-center gap-2">
@@ -317,7 +370,65 @@ function FullPlayer({ item }: { item: PlayerItem }) {
         </div>
       </main>
 
-      <Sheet open={chaptersOpen} onOpenChange={setChaptersOpen}>
+      <Sheet
+        open={panel === 'bookmarks'}
+        onOpenChange={(open) => setPanel(open ? 'bookmarks' : null)}
+      >
+        <SheetPopup side={isMobile ? 'bottom' : 'right'}>
+          <SheetHeader>
+            <SheetTitle>Bookmarks</SheetTitle>
+          </SheetHeader>
+          <SheetPanel>
+            {bookmarks.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                No bookmarks yet. Add one with the bookmark button at the top.
+              </p>
+            ) : (
+              <ol className="-mx-2">
+                {bookmarks.map(({ bookmark, time: at }) => (
+                  <li key={bookmark.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-baseline gap-3 rounded-lg px-2 py-2 text-start hover:bg-accent"
+                      onClick={() => {
+                        player.seek(at)
+                        setPanel(null)
+                      }}
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {item.chapters[chapterAt(item.chapters, at)]?.title ?? item.title}
+                      </span>
+                      <span className="text-muted-foreground text-xs tabular-nums">
+                        {formatClock(at)}
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Delete bookmark at ${formatClock(at)}`}
+                      onClick={() => {
+                        const { kind: _k, profileId: _p, hlc: _h, ...fields } = bookmark
+                        void syncEngine.record(item.profileId, {
+                          kind: 'bookmark',
+                          ...fields,
+                          deleted: true,
+                        })
+                      }}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </SheetPanel>
+        </SheetPopup>
+      </Sheet>
+
+      <Sheet
+        open={panel === 'chapters'}
+        onOpenChange={(open) => setPanel(open ? 'chapters' : null)}
+      >
         <SheetPopup side={isMobile ? 'bottom' : 'right'}>
           <SheetHeader>
             <SheetTitle>Chapters</SheetTitle>
@@ -332,7 +443,7 @@ function FullPlayer({ item }: { item: PlayerItem }) {
                     className="flex w-full items-baseline gap-3 rounded-lg px-2 py-2 text-start hover:bg-accent aria-[current]:font-medium aria-[current]:text-primary"
                     onClick={() => {
                       player.seek(c.start)
-                      setChaptersOpen(false)
+                      setPanel(null)
                     }}
                   >
                     <span className="min-w-0 flex-1">{c.title}</span>
