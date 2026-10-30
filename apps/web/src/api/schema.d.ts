@@ -276,6 +276,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listImports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sync": {
         parameters: {
             query?: never;
@@ -1471,6 +1487,39 @@ export interface operations {
             };
         };
     };
+    listImports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        enabled: boolean;
+                        folder: string | null;
+                        pollSeconds: number;
+                        records: {
+                            path: string;
+                            /** @enum {string} */
+                            status: "created" | "attached" | "duplicate" | "failed";
+                            bookId: string | null;
+                            title: string | null;
+                            message: string | null;
+                            at: number;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
     sync: {
         parameters: {
             query?: never;
@@ -1520,6 +1569,8 @@ export interface operations {
                         status: "unread" | "reading" | "finished";
                         hlc: string;
                     })[];
+                    /** @default [] */
+                    offlineBookIds?: string[];
                 };
             };
         };
@@ -1572,6 +1623,7 @@ export interface operations {
                             status: "unread" | "reading" | "finished";
                             hlc: string;
                         })[];
+                        evict: string[];
                     };
                 };
             };

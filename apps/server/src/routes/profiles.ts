@@ -35,7 +35,17 @@ function assertNameFree(db: Db, name: string, exceptId?: string) {
     throw new AppError(409, 'name_taken', `A Profile called "${clash.name}" already exists`)
 }
 
-export function profileRoutes(db: Db, library: Library): FastifyPluginAsyncZod {
+/** The import folder follows the Profile's name (ticket 09). */
+interface ImportFolders {
+  ensureFolder(name: string): void
+  renameFolder(from: string, to: string): void
+}
+
+export function profileRoutes(
+  db: Db,
+  library: Library,
+  imports?: ImportFolders,
+): FastifyPluginAsyncZod {
   return async (app) => {
     app.get(
       '/api/profiles',
@@ -68,6 +78,7 @@ export function profileRoutes(db: Db, library: Library): FastifyPluginAsyncZod {
           .values({ id: randomUUID(), name, nameKey: nameKey(name), colour, createdAt: Date.now() })
           .returning()
           .get()
+        imports?.ensureFolder(row.name)
         setActiveProfile(reply, row.id)
         return reply.code(201).send(toProfile(row))
       },
@@ -130,6 +141,7 @@ export function profileRoutes(db: Db, library: Library): FastifyPluginAsyncZod {
             .returning()
             .get()
           if (!row) throw new AppError(404, 'not_found', 'Profile not found')
+          if (name !== undefined) imports?.renameFolder(request.profile.name, row.name)
           return toProfile(row)
         },
       )

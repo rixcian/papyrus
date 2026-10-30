@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ApiError } from '@/api/client'
+import { ImportsSection } from '@/components/imports-section'
 import { ProfileForm } from '@/components/profile-form'
 import { ThisDevice } from '@/components/this-device'
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,7 @@ export function SettingsPage() {
           }}
         />
       </section>
+      <ImportsSection />
       <ThisDevice profileId={profile.id} />
       <DeleteProfile name={profile.name} />
     </div>

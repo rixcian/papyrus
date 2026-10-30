@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { expect, type Page, test } from '@playwright/test'
 import { buildReadableEpub } from './book-fixture.ts'
 
@@ -227,6 +229,20 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await bob.goto('/settings')
   await expect(bob.getByText('None yet.', { exact: false })).toBeVisible()
   await bob.screenshot({ path: 'test-results/settings-device.png', fullPage: true })
+
+  // The import folder (ticket 09): a file dropped into Alice's folder shows up in Settings.
+  const importDir = process.env.PAPYRUS_E2E_IMPORT_DIR
+  if (!importDir) throw new Error('PAPYRUS_E2E_IMPORT_DIR is not set')
+  fs.writeFileSync(
+    path.join(importDir, 'Alice', 'dropped.epub'),
+    await buildReadableEpub({ title: 'Dropped In', author: 'Folder Author' }),
+  )
+  await page.goto('/settings')
+  await expect(page.getByText('dropped.epub')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('New Book')).toBeVisible()
+  await page.screenshot({ path: 'test-results/settings-imports.png', fullPage: true })
+  await page.getByRole('link', { name: 'Dropped In' }).click()
+  await expect(page.getByRole('heading', { name: 'Dropped In' })).toBeVisible()
 
   expect(errors).toEqual([])
 })

@@ -131,6 +131,16 @@ export async function extractEpub(file: string): Promise<Extracted> {
   }
 }
 
+/**
+ * Metadata from a standalone OPF, such as the `metadata.opf` Calibre writes next to each
+ * book (ticket 09).
+ */
+export function opfMetadata(xml: Buffer | string): ExtractedMetadata {
+  const opf = parser.parse(xml) as Node
+  const meta = ((opf.package as Node | undefined)?.metadata ?? {}) as Node
+  return readMetadata(meta, list(meta.meta))
+}
+
 /** EPUB 3 `refines` metas, keyed by the id they refine. */
 function refinements(metas: unknown[]): Map<string, Map<string, string>> {
   const out = new Map<string, Map<string, string>>()

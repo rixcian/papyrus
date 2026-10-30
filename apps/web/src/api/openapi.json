@@ -2299,6 +2299,69 @@
         }
       }
     },
+    "/api/imports": {
+      "get": {
+        "operationId": "listImports",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "folder": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "pollSeconds": {
+                      "type": "number"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["created", "attached", "duplicate", "failed"]
+                          },
+                          "bookId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "title": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "message": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["path", "status", "bookId", "title", "message", "at"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["enabled", "folder", "pollSeconds", "records"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sync": {
       "post": {
         "operationId": "sync",
@@ -2461,6 +2524,14 @@
                           "required": ["kind", "bookId", "status", "hlc"]
                         }
                       ]
+                    }
+                  },
+                  "offlineBookIds": {
+                    "default": [],
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 },
@@ -2651,9 +2722,15 @@
                           }
                         ]
                       }
+                    },
+                    "evict": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
-                  "required": ["applied", "cursor", "records"],
+                  "required": ["applied", "cursor", "records", "evict"],
                   "additionalProperties": false
                 }
               }

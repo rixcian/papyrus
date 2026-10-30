@@ -255,3 +255,31 @@ export const highlights = sqliteTable(
     index('highlights_seq').on(t.profileId, t.serverSeq),
   ],
 )
+
+/**
+ * What the import folder scan did with each file, per Profile (ticket 09). A file is looked
+ * at again only when its size or mtime changes, so deleting its Book doesn't re-import it.
+ */
+export const importRecords = sqliteTable(
+  'import_records',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    /** Relative to the Profile's import folder, so renaming the Profile keeps it. */
+    path: text('path').notNull(),
+    size: integer('size').notNull(),
+    mtimeMs: integer('mtime_ms').notNull(),
+    status: text('status').notNull(),
+    bookId: text('book_id'),
+    title: text('title'),
+    message: text('message'),
+    at: integer('at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.profileId, t.path] }),
+    index('import_records_at').on(t.profileId, t.at),
+  ],
+)
+
+export type ImportRecordRow = typeof importRecords.$inferSelect

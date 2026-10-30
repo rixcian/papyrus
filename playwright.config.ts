@@ -3,7 +3,12 @@ import path from 'node:path'
 import { defineConfig } from '@playwright/test'
 
 // Runs against the production bundle: build first (`pnpm build`), then `pnpm e2e`.
-const dataDir = path.join(os.tmpdir(), `papyrus-e2e-${process.pid}`)
+// Workers load this file again, so the directory is fixed once and inherited through env.
+process.env.PAPYRUS_E2E_DATA_DIR ??= path.join(os.tmpdir(), `papyrus-e2e-${process.pid}`)
+const dataDir = process.env.PAPYRUS_E2E_DATA_DIR
+const importDir = path.join(dataDir, 'import')
+// Tests drop files into the import folder through this.
+process.env.PAPYRUS_E2E_IMPORT_DIR = importDir
 
 export default defineConfig({
   testDir: 'e2e',
@@ -17,6 +22,8 @@ export default defineConfig({
       PORT: '18090',
       PAPYRUS_DATA_DIR: dataDir,
       PAPYRUS_PUBLIC_DIR: 'apps/web/dist',
+      PAPYRUS_IMPORT_DIR: importDir,
+      PAPYRUS_IMPORT_POLL_SECONDS: '1',
       LOG_LEVEL: 'warn',
     },
   },

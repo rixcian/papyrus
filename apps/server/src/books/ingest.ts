@@ -22,6 +22,8 @@ export interface IngestInput {
   profileId: string
   staged: StagedFile
   originalName: string
+  /** Metadata from elsewhere (a Calibre `metadata.opf`), used instead of the File's own. */
+  extracted?: Extracted | undefined
 }
 
 /** Uploads and imports both land here (ticket 09). */
@@ -37,7 +39,12 @@ export class Ingest {
     fs.mkdirSync(coversDir, { recursive: true })
   }
 
-  async ingest({ profileId, staged, originalName }: IngestInput): Promise<IngestResult> {
+  async ingest({
+    profileId,
+    staged,
+    originalName,
+    extracted: given,
+  }: IngestInput): Promise<IngestResult> {
     const existing = this.findOwnFileByHash(profileId, staged.sha256)
     if (existing) {
       this.blobs.discard(staged)
@@ -52,7 +59,7 @@ export class Ingest {
     const format = formatFromFilename(originalName)
     let extracted: Extracted
     try {
-      extracted = await extract(format, staged.tempPath, originalName)
+      extracted = given ?? (await extract(format, staged.tempPath, originalName))
     } catch (error) {
       this.blobs.discard(staged)
       return {

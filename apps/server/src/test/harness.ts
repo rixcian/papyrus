@@ -18,7 +18,7 @@ export async function createHarness(env: Record<string, string> = {}): Promise<H
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'papyrus-test-'))
   const config = loadConfig({ PAPYRUS_DATA_DIR: dataDir, LOG_LEVEL: 'silent', ...env })
   const db = openDb(path.join(dataDir, 'papyrus.db'))
-  const app = await buildApp({ config, db })
+  const app = await buildApp({ config, db, startBackground: false })
   return {
     app,
     db,

@@ -17,6 +17,8 @@ import { bookRoutes } from './books/routes.ts'
 import type { Config } from './config.ts'
 import type { Db } from './db/client.ts'
 import { AppError } from './errors.ts'
+import { importRoutes } from './imports/routes.ts'
+import { ImportScanner } from './imports/scanner.ts'
 import { registerSecurityHeaders } from './plugins/security.ts'
 import { registerStatic } from './plugins/spa.ts'
 import { healthRoutes } from './routes/health.ts'
@@ -29,9 +31,21 @@ import { SyncService } from './sync/service.ts'
 export interface AppDeps {
   config: Config
   db: Db
+  /** Polls the import folder once listening; tests drive `importScanner.scan()` themselves. */
+  startBackground?: boolean
 }
 
-export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance> {
+declare module 'fastify' {
+  interface FastifyInstance {
+    importScanner: ImportScanner | undefined
+  }
+}
+
+export async function buildApp({
+  config,
+  db,
+  startBackground = true,
+}: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: config.logLevel },
     trustProxy: config.trustProxy,
@@ -68,10 +82,24 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
   const library = new Library(db, blobs, coversDir)
   const sync = new SyncService(db)
   const shelves = new ShelfService(db, library)
+  const importScanner = config.importDir
+    ? new ImportScanner({
+        db,
+        ingest,
+        blobs,
+        importDir: config.importDir,
+        deleteSource: config.importDeleteSource,
+        log: app.log.child({ module: 'imports' }),
+      })
+    : undefined
+  app.decorate('importScanner', importScanner)
+  if (importScanner && startBackground)
+    app.addHook('onReady', async () => importScanner.start(config.importPollSeconds))
+  app.addHook('onClose', async () => importScanner?.stop())
 
   app.get('/api/openapi.json', { schema: { hide: true } }, async () => app.swagger())
   await app.register(healthRoutes)
-  await app.register(profileRoutes(db, library))
+  await app.register(profileRoutes(db, library, importScanner))
   await app.register(
     bookRoutes({
       db,
@@ -84,6 +112,7 @@ export async function buildApp({ config, db }: AppDeps): Promise<FastifyInstance
     }),
   )
   await app.register(shelfRoutes(db, shelves))
+  await app.register(importRoutes(db, importScanner, config.importPollSeconds))
 
   await app.register(syncRoutes(db, sync, library))
 
