@@ -99,11 +99,21 @@ export function useBook(bookId: string) {
   return useQuery({ queryKey: bookKeys.detail(bookId), queryFn: () => getBook(bookId) })
 }
 
-function useBookMutation<A, R>(fn: (args: A) => Promise<R>) {
+/**
+ * Refetches the library and Book detail afterwards. `gone` names Books the mutation
+ * removed: their detail would only 404 while the page showing them navigates away.
+ */
+function useBookMutation<A, R>(fn: (args: A) => Promise<R>, gone?: (args: A) => string[]) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: bookKeys.all }),
+    onSuccess: (_result, args) => {
+      const removed = new Set(gone?.(args) ?? [])
+      return queryClient.invalidateQueries({
+        queryKey: bookKeys.all,
+        predicate: (q) => !(q.queryKey[1] === 'detail' && removed.has(q.queryKey[2] as string)),
+      })
+    },
   })
 }
 
@@ -151,12 +161,35 @@ export function useUpdateBook(bookId: string) {
 }
 
 export function useDeleteBooks() {
-  return useBookMutation((bookIds: string[]) =>
-    Promise.all(
-      bookIds.map((bookId) =>
-        unwrap(api.DELETE('/api/books/{bookId}', { params: { path: { bookId } } })),
+  return useBookMutation(
+    (bookIds: string[]) =>
+      Promise.all(
+        bookIds.map((bookId) =>
+          unwrap(api.DELETE('/api/books/{bookId}', { params: { path: { bookId } } })),
+        ),
       ),
-    ),
+    (bookIds) => bookIds,
+  )
+}
+
+/** Moves every File of one of the Profile's Books into another and deletes it (ticket 09). */
+export function useMergeBook() {
+  return useBookMutation(
+    ({ bookId, targetId }: { bookId: string; targetId: string }) =>
+      unwrap(
+        api.POST('/api/books/{bookId}/merge', {
+          params: { path: { bookId } },
+          body: { targetId },
+        }),
+      ),
+    ({ bookId }) => [bookId],
+  )
+}
+
+/** Moves a File into a new Book of its own, which the result describes. */
+export function useSplitFile() {
+  return useBookMutation((fileId: string) =>
+    unwrap(api.POST('/api/files/{fileId}/split', { params: { path: { fileId } } })),
   )
 }
 

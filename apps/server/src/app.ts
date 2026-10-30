@@ -13,6 +13,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { BlobStore } from './books/blobs.ts'
 import { Ingest } from './books/ingest.ts'
 import { Library } from './books/library.ts'
+import { Reshape } from './books/reshape.ts'
 import { bookRoutes } from './books/routes.ts'
 import type { Config } from './config.ts'
 import type { Db } from './db/client.ts'
@@ -82,6 +83,7 @@ export async function buildApp({
   const library = new Library(db, blobs, coversDir)
   const sync = new SyncService(db)
   const shelves = new ShelfService(db, library)
+  const reshape = new Reshape({ db, library, ingest, sync, blobs })
   const importScanner = config.importDir
     ? new ImportScanner({
         db,
@@ -108,6 +110,7 @@ export async function buildApp({
       library,
       sync,
       shelves,
+      reshape,
       maxUploadBytes: config.maxUploadBytes,
     }),
   )

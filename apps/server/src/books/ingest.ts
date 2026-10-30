@@ -97,7 +97,7 @@ export class Ingest {
     return path.join(this.coversDir, `${bookId}.${ext}`)
   }
 
-  private saveCover(bookId: string, cover: NonNullable<Extracted['cover']>) {
+  saveCover(bookId: string, cover: NonNullable<Extracted['cover']>) {
     fs.writeFileSync(this.coverPath(bookId, cover.ext), cover.data)
     this.db.update(books).set({ coverExt: cover.ext }).where(eq(books.id, bookId)).run()
   }
@@ -131,7 +131,8 @@ export class Ingest {
     return withoutFormat(eq(books.matchKey, matchKey(metadata.title, metadata.authors[0])))
   }
 
-  private createBook(
+  /** A new Book from extracted metadata; split (ticket 09) uses it too. */
+  createBook(
     tx: Parameters<Parameters<Db['transaction']>[0]>[0],
     profileId: string,
     { metadata: m }: Extracted,

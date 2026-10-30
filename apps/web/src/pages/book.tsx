@@ -1,13 +1,15 @@
-import { CloudCheckIcon, CloudDownloadIcon } from 'lucide-react'
+import { CloudCheckIcon, CloudDownloadIcon, EllipsisIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { BookCover } from '@/components/book-cover'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditBookDialog } from '@/components/edit-book-dialog'
+import { MergeDialog } from '@/components/merge-dialog'
 import { describeShare, ShareDialog } from '@/components/share-dialog'
 import { ShelvesMenu } from '@/components/shelves-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/components/ui/menu'
 import {
   type BookDetail,
   type BookFile,
@@ -17,6 +19,7 @@ import {
   useDeleteFile,
   useSetHidden,
   useSetReadStatus,
+  useSplitFile,
 } from '@/lib/books'
 import {
   isUnreachable,
@@ -56,6 +59,7 @@ function BookView({ book }: { book: BookDetail }) {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [merging, setMerging] = useState(false)
   const setHidden = useSetHidden()
 
   const lastRead =
@@ -114,9 +118,19 @@ function BookView({ book }: { book: BookDetail }) {
               <Button variant="outline" onClick={() => setSharing(true)}>
                 Share
               </Button>
-              <Button variant="destructive-outline" onClick={() => setDeleting(true)}>
-                Delete
-              </Button>
+              <Menu>
+                <MenuTrigger
+                  render={<Button variant="outline" size="icon" aria-label="More actions" />}
+                >
+                  <EllipsisIcon />
+                </MenuTrigger>
+                <MenuPopup align="end">
+                  <MenuItem onClick={() => setMerging(true)}>Merge into…</MenuItem>
+                  <MenuItem variant="destructive" onClick={() => setDeleting(true)}>
+                    Delete
+                  </MenuItem>
+                </MenuPopup>
+              </Menu>
             </>
           )}
           <OfflineToggle book={book} />
@@ -180,7 +194,7 @@ function BookView({ book }: { book: BookDetail }) {
         <h2 className="mt-8 mb-2 font-semibold">Files</h2>
         <ul className="divide-y rounded-xl border">
           {book.files.map((file) => (
-            <FileRow key={file.id} file={file} canRemove={book.owned && book.files.length > 1} />
+            <FileRow key={file.id} file={file} canReshape={book.owned && book.files.length > 1} />
           ))}
         </ul>
       </div>
@@ -194,6 +208,7 @@ function BookView({ book }: { book: BookDetail }) {
           onOpenChange={setSharing}
         />
       )}
+      {merging && <MergeDialog book={book} open={merging} onOpenChange={setMerging} />}
       {editing && <EditBookDialog book={book} open={editing} onOpenChange={setEditing} />}
       <ConfirmDialog
         open={deleting}
@@ -304,9 +319,13 @@ function preferredReadable(files: BookFile[]): BookFile | undefined {
     .sort((a, b) => READ_PREFERENCE.indexOf(a.format) - READ_PREFERENCE.indexOf(b.format))[0]
 }
 
-function FileRow({ file, canRemove }: { file: BookFile; canRemove: boolean }) {
+/** `canReshape`: the owner may remove or split off this File, as it isn't the only one. */
+function FileRow({ file, canReshape }: { file: BookFile; canReshape: boolean }) {
   const deleteFile = useDeleteFile()
+  const splitFile = useSplitFile()
+  const navigate = useNavigate()
   const [removing, setRemoving] = useState(false)
+  const [splitting, setSplitting] = useState(false)
 
   return (
     <li className="flex items-center gap-3 px-3 py-2.5 text-sm">
@@ -323,11 +342,28 @@ function FileRow({ file, canRemove }: { file: BookFile; canRemove: boolean }) {
       <Button variant="ghost" size="sm" render={<a href={`${file.url}?download=1`} download />}>
         Download
       </Button>
-      {canRemove && (
-        <Button variant="ghost" size="sm" onClick={() => setRemoving(true)}>
-          Remove
-        </Button>
+      {canReshape && (
+        <>
+          <Button variant="ghost" size="sm" onClick={() => setSplitting(true)}>
+            Split
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setRemoving(true)}>
+            Remove
+          </Button>
+        </>
       )}
+      <ConfirmDialog
+        open={splitting}
+        onOpenChange={setSplitting}
+        title={`Split ${file.originalName} into a new Book?`}
+        description="It becomes a Book of its own, with the details read from the File. Reading progress, highlights, shelves and Shares come along."
+        confirmLabel="Split into new Book"
+        destructive={false}
+        onConfirm={async () => {
+          const created = await splitFile.mutateAsync(file.id)
+          navigate(`/books/${created.id}`)
+        }}
+      />
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}

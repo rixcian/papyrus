@@ -13,6 +13,7 @@ import { FILE_FORMATS, type FileFormat, READABLE_FORMATS } from './formats.ts'
 import type { Ingest } from './ingest.ts'
 import { type Library, SHARE_MODES } from './library.ts'
 import { matchKey, normaliseIsbn, sortTitle } from './metadata.ts'
+import type { Reshape } from './reshape.ts'
 import { BOOK_SCOPES, BOOK_SORTS, BookSearch } from './search.ts'
 
 const ErrorBody = z.object({ error: z.string(), message: z.string() })
@@ -118,6 +119,7 @@ export interface BookRouteDeps {
   library: Library
   sync: SyncService
   shelves: ShelfService
+  reshape: Reshape
   maxUploadBytes: number
 }
 
@@ -128,6 +130,7 @@ export function bookRoutes({
   library,
   sync,
   shelves,
+  reshape,
   maxUploadBytes,
 }: BookRouteDeps): FastifyPluginAsyncZod {
   const search = new BookSearch(db)
@@ -401,6 +404,36 @@ export function bookRoutes({
           request.body.mode,
           request.body.profileIds,
         ),
+    )
+
+    app.post(
+      '/api/books/:bookId/merge',
+      {
+        schema: {
+          operationId: 'mergeBook',
+          params: BookParams,
+          body: z.object({ targetId: z.string() }),
+          response: { 200: BookDetail, 400: ErrorBody, 403: ErrorBody, 404: ErrorBody },
+        },
+      },
+      async (request) =>
+        detail(
+          request.profile.id,
+          reshape.merge(request.profile.id, request.params.bookId, request.body.targetId),
+        ),
+    )
+
+    app.post(
+      '/api/files/:fileId/split',
+      {
+        schema: {
+          operationId: 'splitFile',
+          params: FileParams,
+          response: { 200: BookDetail, 403: ErrorBody, 404: ErrorBody, 409: ErrorBody },
+        },
+      },
+      async (request) =>
+        detail(request.profile.id, await reshape.split(request.profile.id, request.params.fileId)),
     )
 
     app.put(

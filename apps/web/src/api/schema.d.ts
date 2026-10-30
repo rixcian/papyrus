@@ -164,6 +164,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/books/{bookId}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["mergeBook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{fileId}/split": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["splitFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/books/{bookId}/hidden": {
         parameters: {
             query?: never;
@@ -1052,6 +1084,226 @@ export interface operations {
             };
             /** @description Default Response */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    mergeBook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    targetId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        title: string;
+                        authors: string[];
+                        seriesName: string | null;
+                        seriesIndex: number | null;
+                        coverUrl: string | null;
+                        owned: boolean;
+                        sharedBy: string | null;
+                        addedAt: number;
+                        /** @enum {string} */
+                        readStatus: "unread" | "reading" | "finished";
+                        lastRead: {
+                            fileId: string;
+                            fraction: number;
+                            at: number;
+                        } | null;
+                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
+                        description: string | null;
+                        language: string | null;
+                        publisher: string | null;
+                        publishedDate: string | null;
+                        isbn: string | null;
+                        tags: string[];
+                        ownerName: string;
+                        hidden: boolean;
+                        share: {
+                            /** @enum {string} */
+                            mode: "none" | "everyone" | "named";
+                            profiles: {
+                                id: string;
+                                name: string;
+                            }[];
+                        } | null;
+                        shelves: {
+                            id: string;
+                            name: string;
+                        }[];
+                        files: {
+                            id: string;
+                            /** @enum {string} */
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            originalName: string;
+                            size: number;
+                            readable: boolean;
+                            url: string;
+                            addedAt: number;
+                        }[];
+                        updatedAt: number;
+                    };
+                };
+            };
+            /** @description Default Response */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    splitFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        title: string;
+                        authors: string[];
+                        seriesName: string | null;
+                        seriesIndex: number | null;
+                        coverUrl: string | null;
+                        owned: boolean;
+                        sharedBy: string | null;
+                        addedAt: number;
+                        /** @enum {string} */
+                        readStatus: "unread" | "reading" | "finished";
+                        lastRead: {
+                            fileId: string;
+                            fraction: number;
+                            at: number;
+                        } | null;
+                        formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other")[];
+                        description: string | null;
+                        language: string | null;
+                        publisher: string | null;
+                        publishedDate: string | null;
+                        isbn: string | null;
+                        tags: string[];
+                        ownerName: string;
+                        hidden: boolean;
+                        share: {
+                            /** @enum {string} */
+                            mode: "none" | "everyone" | "named";
+                            profiles: {
+                                id: string;
+                                name: string;
+                            }[];
+                        } | null;
+                        shelves: {
+                            id: string;
+                            name: string;
+                        }[];
+                        files: {
+                            id: string;
+                            /** @enum {string} */
+                            format: "epub" | "mobi" | "azw3" | "pdf" | "cbz" | "other";
+                            originalName: string;
+                            size: number;
+                            readable: boolean;
+                            url: string;
+                            addedAt: number;
+                        }[];
+                        updatedAt: number;
+                    };
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -18,6 +18,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   onConfirm,
+  destructive = true,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -25,6 +26,8 @@ export function ConfirmDialog({
   description: string
   confirmLabel: string
   onConfirm: () => Promise<unknown>
+  /** Red confirm button; off for actions that lose nothing. */
+  destructive?: boolean
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +43,7 @@ export function ConfirmDialog({
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           <Button
-            variant="destructive"
+            variant={destructive ? 'destructive' : 'default'}
             disabled={pending}
             onClick={async () => {
               setPending(true)

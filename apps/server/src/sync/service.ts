@@ -59,7 +59,7 @@ export type ServerRecord =
   | ({ kind: 'bookmark'; bookId: string } & BookmarkFields)
   | ({ kind: 'highlight'; bookId: string } & HighlightFields)
 
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
 const sqlIncrement = sql`${counters.value} + 1`
 
@@ -268,6 +268,14 @@ export class SyncService {
       .values({ profileId, bookId, ...row })
       .onConflictDoUpdate({ target: [readStatus.profileId, readStatus.bookId], set: row })
       .run()
+  }
+
+  /**
+   * Last write wins for a Read Status written by the server itself, as when Books are merged
+   * or split (ticket 09). A new serverSeq makes devices pull it.
+   */
+  mergeStatus(tx: Tx, profileId: string, bookId: string, status: ReadStatus, hlc: string): boolean {
+    return this.applyStatus(tx, profileId, { kind: 'readStatus', bookId, status, hlc })
   }
 
   private applyStatus(

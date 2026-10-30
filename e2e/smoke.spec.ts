@@ -244,6 +244,24 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await page.getByRole('link', { name: 'Dropped In' }).click()
   await expect(page.getByRole('heading', { name: 'Dropped In' })).toBeVisible()
 
+  // Merge it into Arrakis Notes, then split it back out (ticket 09).
+  await page.getByRole('button', { name: 'More actions' }).click()
+  await page.getByRole('menuitem', { name: 'Merge into…' }).click()
+  await page.getByLabel('Find a Book').fill('arrakis')
+  await page.getByRole('button', { name: /Arrakis Notes/ }).click()
+  await page.screenshot({ path: 'test-results/merge-dialog.png' })
+  await page.getByRole('button', { name: 'Merge into “Arrakis Notes”' }).click()
+  await expect(page.getByRole('heading', { name: 'Arrakis Notes' })).toBeVisible()
+  await expect(page.getByText('dropped.epub')).toBeVisible()
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'dropped.epub' })
+    .getByRole('button', { name: 'Split' })
+    .click()
+  await page.getByRole('button', { name: 'Split into new Book' }).click()
+  await expect(page.getByRole('heading', { name: 'Dropped In' })).toBeVisible()
+  await expect(page.getByText('Folder Author')).toBeVisible()
+
   expect(errors).toEqual([])
 })
 
