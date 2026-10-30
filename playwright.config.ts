@@ -14,17 +14,26 @@ export default defineConfig({
   testDir: 'e2e',
   timeout: 30_000,
   use: { baseURL: 'http://localhost:18090', trace: 'retain-on-failure' },
-  webServer: {
-    command: 'node apps/server/dist/index.js',
-    url: 'http://localhost:18090/api/health',
-    reuseExistingServer: false,
-    env: {
-      PORT: '18090',
-      PAPYRUS_DATA_DIR: dataDir,
-      PAPYRUS_PUBLIC_DIR: 'apps/web/dist',
-      PAPYRUS_IMPORT_DIR: importDir,
-      PAPYRUS_IMPORT_POLL_SECONDS: '1',
-      LOG_LEVEL: 'warn',
+  webServer: [
+    {
+      command: 'node e2e/fake-openlibrary.ts 18091',
+      url: 'http://localhost:18091/health',
+      reuseExistingServer: false,
     },
-  },
+    {
+      command: 'node apps/server/dist/index.js',
+      url: 'http://localhost:18090/api/health',
+      reuseExistingServer: false,
+      env: {
+        PORT: '18090',
+        PAPYRUS_DATA_DIR: dataDir,
+        PAPYRUS_PUBLIC_DIR: 'apps/web/dist',
+        PAPYRUS_IMPORT_DIR: importDir,
+        PAPYRUS_IMPORT_POLL_SECONDS: '1',
+        PAPYRUS_OPENLIBRARY_URL: 'http://localhost:18091',
+        PAPYRUS_OPENLIBRARY_COVERS_URL: 'http://localhost:18091',
+        LOG_LEVEL: 'warn',
+      },
+    },
+  ],
 })

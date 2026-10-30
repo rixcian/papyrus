@@ -220,7 +220,7 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getBookCover"];
-        put?: never;
+        put: operations["setCoverFromOpenLibrary"];
         post?: never;
         delete?: never;
         options?: never;
@@ -302,6 +302,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["updateShelfBooks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/metadata/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["lookupMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/metadata/cover/{coverId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["previewCover"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1388,6 +1420,70 @@ export interface operations {
             };
         };
     };
+    setCoverFromOpenLibrary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    coverId: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Default Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": null;
+                };
+            };
+            /** @description Default Response */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+            /** @description Default Response */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
     getFile: {
         parameters: {
             query?: {
@@ -1736,6 +1832,77 @@ export interface operations {
                         message: string;
                     };
                 };
+            };
+        };
+    };
+    lookupMetadata: {
+        parameters: {
+            query?: {
+                isbn?: string;
+                title?: string;
+                author?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        candidates: {
+                            key: string;
+                            title: string;
+                            authors: string[];
+                            description: string | null;
+                            publisher: string | null;
+                            publishedDate: string | null;
+                            isbn: string | null;
+                            language: string | null;
+                            tags: string[];
+                            coverId: number | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Default Response */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    previewCover: {
+        parameters: {
+            query?: {
+                size?: "S" | "M" | "L";
+            };
+            header?: never;
+            path: {
+                coverId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

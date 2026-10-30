@@ -1,5 +1,12 @@
+import { GlobeIcon } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { ApiError } from '@/api/client'
+import {
+  coverPreview,
+  FindOnline,
+  type FoundMetadata,
+  type MetadataForm,
+} from '@/components/find-online'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { type BookDetail, useUpdateBook } from '@/lib/books'
+import { type BookDetail, useSetCover, useUpdateBook } from '@/lib/books'
 
 const lines = (value: string) =>
   value
@@ -43,7 +50,7 @@ function TextField({
   )
 }
 
-/** Owner-only metadata editing (ticket 09); "Find online" arrives with slice 16. */
+/** Owner-only metadata editing, with "Find online" on Open Library (ticket 09). */
 export function EditBookDialog({
   book,
   open,
@@ -65,6 +72,36 @@ export function EditBookDialog({
   const [language, setLanguage] = useState(book.language ?? '')
   const [isbn, setIsbn] = useState(book.isbn ?? '')
   const [error, setError] = useState<string | null>(null)
+  const [findingOnline, setFindingOnline] = useState(false)
+  const [coverId, setCoverId] = useState<number | null>(null)
+  const setCover = useSetCover(book.id)
+
+  const form: MetadataForm = {
+    title,
+    authors,
+    tags,
+    description,
+    publisher,
+    publishedDate,
+    language,
+    isbn,
+  }
+  const setters: Record<keyof MetadataForm, (v: string) => void> = {
+    title: setTitle,
+    authors: setAuthors,
+    tags: setTags,
+    description: setDescription,
+    publisher: setPublisher,
+    publishedDate: setPublishedDate,
+    language: setLanguage,
+    isbn: setIsbn,
+  }
+  const applyFound = ({ coverId: found, ...fields }: FoundMetadata) => {
+    for (const [key, value] of Object.entries(fields))
+      if (value !== undefined) setters[key as keyof MetadataForm](value)
+    if (found) setCoverId(found)
+    setFindingOnline(false)
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -84,6 +121,7 @@ export function EditBookDialog({
         language,
         isbn,
       })
+      if (coverId) await setCover.mutateAsync(coverId)
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Something went wrong')
@@ -95,48 +133,85 @@ export function EditBookDialog({
       <DialogPopup className="max-w-2xl">
         <form onSubmit={submit} className="contents">
           <DialogHeader>
-            <DialogTitle>Edit metadata</DialogTitle>
+            <div className="flex items-center justify-between gap-3 pe-8">
+              <DialogTitle>{findingOnline ? 'Find online' : 'Edit metadata'}</DialogTitle>
+              {!findingOnline && (
+                <Button size="sm" variant="outline" onClick={() => setFindingOnline(true)}>
+                  <GlobeIcon />
+                  Find online
+                </Button>
+              )}
+            </div>
           </DialogHeader>
-          <DialogPanel className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <TextField label="Title" value={title} onChange={setTitle} required />
-            </div>
-            <Label className="flex flex-col items-stretch gap-1.5 sm:col-span-2">
-              <span>Authors, one per line</span>
-              <Textarea value={authors} onChange={(e) => setAuthors(e.target.value)} rows={2} />
-            </Label>
-            <TextField label="Series" value={seriesName} onChange={setSeriesName} />
-            <TextField
-              label="Number in series"
-              value={seriesIndex}
-              onChange={setSeriesIndex}
-              inputMode="decimal"
-            />
-            <div className="sm:col-span-2">
-              <TextField label="Tags, comma-separated" value={tags} onChange={setTags} />
-            </div>
-            <Label className="flex flex-col items-stretch gap-1.5 sm:col-span-2">
-              <span>Description</span>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={5}
+          {findingOnline ? (
+            <DialogPanel>
+              <FindOnline
+                current={form}
+                hasCover={Boolean(book.coverUrl) || coverId !== null}
+                onApply={applyFound}
+                onCancel={() => setFindingOnline(false)}
               />
-            </Label>
-            <TextField label="Publisher" value={publisher} onChange={setPublisher} />
-            <TextField label="Published" value={publishedDate} onChange={setPublishedDate} />
-            <TextField label="Language" value={language} onChange={setLanguage} />
-            <TextField label="ISBN" value={isbn} onChange={setIsbn} />
-            {error && <p className="text-destructive-foreground text-sm sm:col-span-2">{error}</p>}
-          </DialogPanel>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={update.isPending || !title.trim()}>
-              Save
-            </Button>
-          </DialogFooter>
+            </DialogPanel>
+          ) : (
+            <DialogPanel className="grid gap-4 sm:grid-cols-2">
+              {coverId && (
+                <div className="flex items-center gap-3 rounded-xl border p-3 text-sm sm:col-span-2">
+                  <img src={coverPreview(coverId, 'S')} alt="" className="w-10 rounded-sm" />
+                  <span className="flex-1">
+                    The cover from Open Library is saved with the rest.
+                  </span>
+                  <Button size="sm" variant="ghost" onClick={() => setCoverId(null)}>
+                    Keep current cover
+                  </Button>
+                </div>
+              )}
+              <div className="sm:col-span-2">
+                <TextField label="Title" value={title} onChange={setTitle} required />
+              </div>
+              <Label className="flex flex-col items-stretch gap-1.5 sm:col-span-2">
+                <span>Authors, one per line</span>
+                <Textarea value={authors} onChange={(e) => setAuthors(e.target.value)} rows={2} />
+              </Label>
+              <TextField label="Series" value={seriesName} onChange={setSeriesName} />
+              <TextField
+                label="Number in series"
+                value={seriesIndex}
+                onChange={setSeriesIndex}
+                inputMode="decimal"
+              />
+              <div className="sm:col-span-2">
+                <TextField label="Tags, comma-separated" value={tags} onChange={setTags} />
+              </div>
+              <Label className="flex flex-col items-stretch gap-1.5 sm:col-span-2">
+                <span>Description</span>
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={5}
+                />
+              </Label>
+              <TextField label="Publisher" value={publisher} onChange={setPublisher} />
+              <TextField label="Published" value={publishedDate} onChange={setPublishedDate} />
+              <TextField label="Language" value={language} onChange={setLanguage} />
+              <TextField label="ISBN" value={isbn} onChange={setIsbn} />
+              {error && (
+                <p className="text-destructive-foreground text-sm sm:col-span-2">{error}</p>
+              )}
+            </DialogPanel>
+          )}
+          {!findingOnline && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={update.isPending || setCover.isPending || !title.trim()}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          )}
         </form>
       </DialogPopup>
     </Dialog>

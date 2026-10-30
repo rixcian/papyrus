@@ -13,6 +13,8 @@ const EnvSchema = z.object({
   PAPYRUS_IMPORT_DELETE_SOURCE: bool.default(false),
   PAPYRUS_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(500),
   PAPYRUS_TRUST_PROXY: bool.default(false),
+  PAPYRUS_OPENLIBRARY_URL: z.url().default('https://openlibrary.org'),
+  PAPYRUS_OPENLIBRARY_COVERS_URL: z.url().default('https://covers.openlibrary.org'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 })
 
@@ -27,6 +29,9 @@ export interface Config {
   importDeleteSource: boolean
   maxUploadBytes: number
   trustProxy: boolean
+  /** Where "Find online" asks; tests point these at a fake. */
+  openLibraryUrl: string
+  openLibraryCoversUrl: string
   logLevel: string
 }
 
@@ -42,6 +47,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     importDeleteSource: e.PAPYRUS_IMPORT_DELETE_SOURCE,
     maxUploadBytes: e.PAPYRUS_MAX_UPLOAD_MB * 1024 * 1024,
     trustProxy: e.PAPYRUS_TRUST_PROXY,
+    openLibraryUrl: e.PAPYRUS_OPENLIBRARY_URL.replace(/\/$/, ''),
+    openLibraryCoversUrl: e.PAPYRUS_OPENLIBRARY_COVERS_URL.replace(/\/$/, ''),
     logLevel: e.LOG_LEVEL,
   }
 }

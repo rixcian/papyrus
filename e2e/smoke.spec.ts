@@ -262,6 +262,21 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await expect(page.getByRole('heading', { name: 'Dropped In' })).toBeVisible()
   await expect(page.getByText('Folder Author')).toBeVisible()
 
+  // Find online (ticket 09): look Arrakis Notes up, copy the description and cover, save.
+  await page.goto('/')
+  await page.locator('a[href^="/books/"]', { hasText: 'Arrakis Notes' }).click()
+  await page.getByRole('button', { name: 'Edit metadata' }).click()
+  await page.getByRole('button', { name: 'Find online' }).click()
+  await page.getByRole('button', { name: /Arrakis Notes.*Desert Press/ }).click()
+  await expect(page.getByRole('checkbox', { name: /Description/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /Cover/ })).toBeChecked()
+  await page.screenshot({ path: 'test-results/find-online.png' })
+  await page.getByRole('button', { name: /Copy \d+ into the form/ }).click()
+  await expect(page.getByLabel('Description')).toHaveValue('Field notes from the desert planet.')
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Field notes from the desert planet.')).toBeVisible()
+  await expect(page.locator('img[src^="/api/books/"][src*="/cover"]').first()).toBeVisible()
+
   expect(errors).toEqual([])
 })
 

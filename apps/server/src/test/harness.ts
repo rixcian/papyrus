@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { FastifyInstance, InjectOptions } from 'fastify'
-import { buildApp } from '../app.ts'
+import { type AppDeps, buildApp } from '../app.ts'
 import { loadConfig } from '../config.ts'
 import { type Db, openDb } from '../db/client.ts'
 
@@ -14,11 +14,14 @@ export interface Harness {
 }
 
 /** A fresh app on a temp data dir and a migrated SQLite file. */
-export async function createHarness(env: Record<string, string> = {}): Promise<Harness> {
+export async function createHarness(
+  env: Record<string, string> = {},
+  deps: Pick<AppDeps, 'openLibrary'> = {},
+): Promise<Harness> {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'papyrus-test-'))
   const config = loadConfig({ PAPYRUS_DATA_DIR: dataDir, LOG_LEVEL: 'silent', ...env })
   const db = openDb(path.join(dataDir, 'papyrus.db'))
-  const app = await buildApp({ config, db, startBackground: false })
+  const app = await buildApp({ config, db, startBackground: false, ...deps })
   return {
     app,
     db,

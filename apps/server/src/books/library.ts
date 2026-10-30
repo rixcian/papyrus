@@ -225,6 +225,19 @@ export class Library {
     return book.coverExt ? path.join(this.coversDir, `${book.id}.${book.coverExt}`) : undefined
   }
 
+  /** A new cover from elsewhere; the old file goes, and the cover URL changes with it. */
+  replaceCover(book: BookRow, data: Buffer, ext: string): void {
+    const old = this.coverPath(book)
+    if (old) fs.rmSync(old, { force: true })
+    fs.mkdirSync(this.coversDir, { recursive: true })
+    fs.writeFileSync(path.join(this.coversDir, `${book.id}.${ext}`), data)
+    this.db
+      .update(books)
+      .set({ coverExt: ext, updatedAt: Date.now() })
+      .where(eq(books.id, book.id))
+      .run()
+  }
+
   /**
    * Deleting a Book removes it for every Profile, with all reading state on it (ticket 06).
    * Blobs go only when no other File still points at the same bytes.

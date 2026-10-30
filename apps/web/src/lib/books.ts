@@ -193,6 +193,15 @@ export function useSplitFile() {
   )
 }
 
+/** Downloads an Open Library cover onto the Book (ticket 09: Find online). */
+export function useSetCover(bookId: string) {
+  return useBookMutation((coverId: number) =>
+    unwrap(
+      api.PUT('/api/books/{bookId}/cover', { params: { path: { bookId } }, body: { coverId } }),
+    ),
+  )
+}
+
 export function useDeleteFile() {
   return useBookMutation((fileId: string) =>
     unwrap(api.DELETE('/api/files/{fileId}', { params: { path: { fileId } } })),

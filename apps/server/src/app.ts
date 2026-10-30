@@ -20,6 +20,8 @@ import type { Db } from './db/client.ts'
 import { AppError } from './errors.ts'
 import { importRoutes } from './imports/routes.ts'
 import { ImportScanner } from './imports/scanner.ts'
+import { OpenLibrary } from './metadata/openlibrary.ts'
+import { metadataRoutes } from './metadata/routes.ts'
 import { registerSecurityHeaders } from './plugins/security.ts'
 import { registerStatic } from './plugins/spa.ts'
 import { healthRoutes } from './routes/health.ts'
@@ -32,6 +34,8 @@ import { SyncService } from './sync/service.ts'
 export interface AppDeps {
   config: Config
   db: Db
+  /** Tests pass a fake; everyone else talks to openlibrary.org. */
+  openLibrary?: OpenLibrary
   /** Polls the import folder once listening; tests drive `importScanner.scan()` themselves. */
   startBackground?: boolean
 }
@@ -46,6 +50,7 @@ export async function buildApp({
   config,
   db,
   startBackground = true,
+  openLibrary,
 }: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: config.logLevel },
@@ -115,6 +120,13 @@ export async function buildApp({
     }),
   )
   await app.register(shelfRoutes(db, shelves))
+  await app.register(
+    metadataRoutes(
+      db,
+      library,
+      openLibrary ?? new OpenLibrary(undefined, config.openLibraryUrl, config.openLibraryCoversUrl),
+    ),
+  )
   await app.register(importRoutes(db, importScanner, config.importPollSeconds))
 
   await app.register(syncRoutes(db, sync, library))

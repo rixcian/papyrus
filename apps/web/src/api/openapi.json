@@ -2346,6 +2346,112 @@
             "description": "Default Response"
           }
         }
+      },
+      "put": {
+        "operationId": "setCoverFromOpenLibrary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "coverId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["coverId"]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "bookId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "nullable": true,
+                  "enum": [null]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/files/{fileId}": {
@@ -2905,6 +3011,172 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/metadata/lookup": {
+      "get": {
+        "operationId": "lookupMetadata",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "in": "query",
+            "name": "isbn",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "in": "query",
+            "name": "title",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "author",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "candidates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "authors": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "publisher": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "publishedDate": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "isbn": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "language": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "coverId": {
+                            "nullable": true,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "title",
+                          "authors",
+                          "description",
+                          "publisher",
+                          "publishedDate",
+                          "isbn",
+                          "language",
+                          "tags",
+                          "coverId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["candidates"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/cover/{coverId}": {
+      "get": {
+        "operationId": "previewCover",
+        "parameters": [
+          {
+            "schema": {
+              "default": "M",
+              "type": "string",
+              "enum": ["S", "M", "L"]
+            },
+            "in": "query",
+            "name": "size",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "coverId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         }
       }
