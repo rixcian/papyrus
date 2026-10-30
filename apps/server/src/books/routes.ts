@@ -6,6 +6,7 @@ import type { Db } from '../db/client.ts'
 import { type BookRow, bookAuthors, books, bookTags, profiles } from '../db/schema.ts'
 import { AppError, notFound } from '../errors.ts'
 import { requireProfile } from '../session.ts'
+import { READ_STATUSES, type SyncService } from '../sync/service.ts'
 import type { BlobStore } from './blobs.ts'
 import { FILE_FORMATS, type FileFormat, READABLE_FORMATS } from './formats.ts'
 import type { Ingest } from './ingest.ts'
@@ -27,6 +28,9 @@ const BookSummary = z.object({
   formats: z.array(Format),
   owned: z.boolean(),
   addedAt: z.number(),
+  readStatus: z.enum(READ_STATUSES),
+  /** The File read most recently and how far into it, for resuming and "Continue reading". */
+  lastRead: z.object({ fileId: z.string(), fraction: z.number(), at: z.number() }).nullable(),
 })
 
 const BookFile = z.object({
@@ -40,6 +44,7 @@ const BookFile = z.object({
 })
 
 const BookDetail = BookSummary.omit({ formats: true }).extend({
+  formats: z.array(Format),
   description: z.string().nullable(),
   language: z.string().nullable(),
   publisher: z.string().nullable(),
@@ -94,6 +99,7 @@ export interface BookRouteDeps {
   blobs: BlobStore
   ingest: Ingest
   library: Library
+  sync: SyncService
   maxUploadBytes: number
 }
 
@@ -102,11 +108,25 @@ export function bookRoutes({
   blobs,
   ingest,
   library,
+  sync,
   maxUploadBytes,
 }: BookRouteDeps): FastifyPluginAsyncZod {
   const coverUrl = (b: BookRow) => (b.coverExt ? `/api/books/${b.id}/cover?v=${b.updatedAt}` : null)
 
+  function readingState(profileId: string, bookIds: string[]) {
+    const statuses = sync.statusFor(profileId, bookIds)
+    const latest = sync.latestProgress(profileId, bookIds)
+    return (bookId: string) => {
+      const last = latest.get(bookId)
+      return {
+        readStatus: statuses.get(bookId) ?? ('unread' as const),
+        lastRead: last ? { fileId: last.fileId, fraction: last.fraction, at: last.readAt } : null,
+      }
+    }
+  }
+
   function detail(profileId: string, book: BookRow): z.infer<typeof BookDetail> {
+    const fileRows = library.filesOf([book.id])
     const owner = db
       .select({ name: profiles.name })
       .from(profiles)
@@ -129,7 +149,9 @@ export function bookRoutes({
       tags: library.tagsOf(book.id),
       ownerName: owner?.name ?? '',
       updatedAt: book.updatedAt,
-      files: library.filesOf([book.id]).map((f) => ({
+      formats: [...new Set(fileRows.map((f) => f.format as FileFormat))],
+      ...readingState(profileId, [book.id])(book.id),
+      files: fileRows.map((f) => ({
         id: f.id,
         format: f.format as FileFormat,
         originalName: f.originalName,
@@ -171,6 +193,7 @@ export function bookRoutes({
       {
         schema: {
           operationId: 'listBooks',
+          querystring: z.object({ status: z.enum(READ_STATUSES).optional() }),
           response: { 200: z.object({ books: z.array(BookSummary) }) },
         },
       },
@@ -184,23 +207,25 @@ export function bookRoutes({
         const ids = rows.map((b) => b.id)
         const authors = library.authorsOf(ids)
         const fileRows = library.filesOf(ids)
-        return {
-          books: rows.map((b) => ({
-            id: b.id,
-            title: b.title,
-            authors: authors.get(b.id) ?? [],
-            seriesName: b.seriesName,
-            seriesIndex: b.seriesIndex,
-            coverUrl: coverUrl(b),
-            formats: [
-              ...new Set(
-                fileRows.filter((f) => f.bookId === b.id).map((f) => f.format as FileFormat),
-              ),
-            ],
-            owned: b.ownerProfileId === request.profile.id,
-            addedAt: b.addedAt,
-          })),
-        }
+        const stateOf = readingState(request.profile.id, ids)
+        const summaries = rows.map((b) => ({
+          id: b.id,
+          title: b.title,
+          authors: authors.get(b.id) ?? [],
+          seriesName: b.seriesName,
+          seriesIndex: b.seriesIndex,
+          coverUrl: coverUrl(b),
+          formats: [
+            ...new Set(
+              fileRows.filter((f) => f.bookId === b.id).map((f) => f.format as FileFormat),
+            ),
+          ],
+          owned: b.ownerProfileId === request.profile.id,
+          addedAt: b.addedAt,
+          ...stateOf(b.id),
+        }))
+        const { status } = request.query
+        return { books: status ? summaries.filter((b) => b.readStatus === status) : summaries }
       },
     )
 

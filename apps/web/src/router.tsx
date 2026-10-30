@@ -7,6 +7,7 @@ import { ProfilesPage } from './pages/profiles'
 import { ReaderPage } from './pages/reader'
 import { SettingsPage } from './pages/settings'
 import { WelcomePage } from './pages/welcome'
+import { useSync } from './sync'
 
 function FullPageMessage({ children }: { children: string }) {
   return <div className="grid min-h-dvh place-items-center text-muted-foreground">{children}</div>
@@ -16,6 +17,7 @@ function FullPageMessage({ children }: { children: string }) {
 function RequireProfile() {
   const profiles = useProfiles()
   const session = useSession()
+  useSync(session.data?.id)
   if (profiles.isPending || session.isPending) return <FullPageMessage>Loading…</FullPageMessage>
   if (profiles.isError || session.isError)
     return <FullPageMessage>Can't reach the Papyrus server.</FullPageMessage>

@@ -82,3 +82,49 @@ export const files = sqliteTable(
 
 export type BookRow = typeof books.$inferSelect
 export type FileRow = typeof files.$inferSelect
+
+/** Monotonic counters; `sync` hands out the serverSeq that devices pull by (ticket 08). */
+export const counters = sqliteTable('counters', {
+  name: text('name').primaryKey(),
+  value: integer('value').notNull(),
+})
+
+export const readingProgress = sqliteTable(
+  'reading_progress',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    fileId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    cfi: text('cfi').notNull(),
+    fraction: real('fraction').notNull(),
+    deviceId: text('device_id').notNull(),
+    hlc: text('hlc').notNull(),
+    serverSeq: integer('server_seq').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.profileId, t.fileId] }),
+    index('reading_progress_seq').on(t.profileId, t.serverSeq),
+  ],
+)
+
+export const readStatus = sqliteTable(
+  'read_status',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    bookId: text('book_id')
+      .notNull()
+      .references(() => books.id, { onDelete: 'cascade' }),
+    status: text('status').notNull(),
+    hlc: text('hlc').notNull(),
+    serverSeq: integer('server_seq').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.profileId, t.bookId] }),
+    index('read_status_seq').on(t.profileId, t.serverSeq),
+  ],
+)

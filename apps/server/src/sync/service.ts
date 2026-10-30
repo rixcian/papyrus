@@ -1,0 +1,221 @@
+import { compareHlc, decodeHlc, isHlc } from '@papyrus/shared'
+import { and, eq, gt, inArray, sql } from 'drizzle-orm'
+import type { Db } from '../db/client.ts'
+import { books, counters, files, readingProgress, readStatus } from '../db/schema.ts'
+
+export const READ_STATUSES = ['unread', 'reading', 'finished'] as const
+export type ReadStatus = (typeof READ_STATUSES)[number]
+
+/** Reading progress at or beyond this counts as finished (ticket 08). */
+export const FINISHED_AT = 0.98
+/** Changes stamped further ahead than this are dropped, so a wrong clock can't win forever. */
+const MAX_CLOCK_LEAD_MS = 24 * 60 * 60 * 1000
+
+export type Change =
+  | { kind: 'progress'; fileId: string; cfi: string; fraction: number; hlc: string }
+  | { kind: 'readStatus'; bookId: string; status: ReadStatus; hlc: string }
+
+export type ServerRecord =
+  | {
+      kind: 'progress'
+      fileId: string
+      bookId: string
+      cfi: string
+      fraction: number
+      deviceId: string
+      hlc: string
+    }
+  | { kind: 'readStatus'; bookId: string; status: ReadStatus; hlc: string }
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
+const sqlIncrement = sql`${counters.value} + 1`
+
+const rank = (s: string) => READ_STATUSES.indexOf(s as ReadStatus)
+
+/**
+ * Last write wins per record on HLC timestamps (ADR 0002). Every accepted write gets a
+ * new serverSeq, which is what devices pull by.
+ */
+export class SyncService {
+  private readonly db: Db
+  private readonly now: () => number
+
+  constructor(db: Db, now: () => number = Date.now) {
+    this.db = db
+    this.now = now
+  }
+
+  apply(profileId: string, deviceId: string, changes: Change[]): { applied: number } {
+    let applied = 0
+    this.db.transaction((tx) => {
+      for (const change of changes) {
+        if (!this.validHlc(change.hlc)) continue
+        if (change.kind === 'progress' && this.applyProgress(tx, profileId, deviceId, change))
+          applied++
+        if (change.kind === 'readStatus' && this.applyStatus(tx, profileId, change)) applied++
+      }
+    })
+    return { applied }
+  }
+
+  /** Everything for the Profile written after `cursor`, and the cursor to use next time. */
+  pull(profileId: string, cursor: number): { cursor: number; records: ServerRecord[] } {
+    const progress = this.db
+      .select({ p: readingProgress, bookId: files.bookId })
+      .from(readingProgress)
+      .innerJoin(files, eq(files.id, readingProgress.fileId))
+      .where(and(eq(readingProgress.profileId, profileId), gt(readingProgress.serverSeq, cursor)))
+      .all()
+    const statuses = this.db
+      .select()
+      .from(readStatus)
+      .where(and(eq(readStatus.profileId, profileId), gt(readStatus.serverSeq, cursor)))
+      .all()
+    return {
+      cursor: this.currentSeq(),
+      records: [
+        ...progress.map(
+          ({ p, bookId }): ServerRecord => ({
+            kind: 'progress',
+            fileId: p.fileId,
+            bookId,
+            cfi: p.cfi,
+            fraction: p.fraction,
+            deviceId: p.deviceId,
+            hlc: p.hlc,
+          }),
+        ),
+        ...statuses.map(
+          (s): ServerRecord => ({
+            kind: 'readStatus',
+            bookId: s.bookId,
+            status: s.status as ReadStatus,
+            hlc: s.hlc,
+          }),
+        ),
+      ],
+    }
+  }
+
+  progressFor(profileId: string, fileId: string) {
+    return this.db
+      .select()
+      .from(readingProgress)
+      .where(and(eq(readingProgress.profileId, profileId), eq(readingProgress.fileId, fileId)))
+      .get()
+  }
+
+  statusFor(profileId: string, bookIds: string[]): Map<string, ReadStatus> {
+    if (!bookIds.length) return new Map()
+    const rows = this.db
+      .select()
+      .from(readStatus)
+      .where(and(eq(readStatus.profileId, profileId), inArray(readStatus.bookId, bookIds)))
+      .all()
+    return new Map(rows.map((r) => [r.bookId, r.status as ReadStatus]))
+  }
+
+  /** The most recently read File of each Book, for "Continue reading" and resuming. */
+  latestProgress(profileId: string, bookIds: string[]) {
+    const out = new Map<string, { fileId: string; fraction: number; readAt: number }>()
+    if (!bookIds.length) return out
+    const rows = this.db
+      .select({ p: readingProgress, bookId: files.bookId })
+      .from(readingProgress)
+      .innerJoin(files, eq(files.id, readingProgress.fileId))
+      .where(and(eq(readingProgress.profileId, profileId), inArray(files.bookId, bookIds)))
+      .all()
+    for (const { p, bookId } of rows) {
+      const current = out.get(bookId)
+      const readAt = decodeHlc(p.hlc).wall
+      if (!current || readAt > current.readAt)
+        out.set(bookId, { fileId: p.fileId, fraction: p.fraction, readAt })
+    }
+    return out
+  }
+
+  private validHlc(hlc: string): boolean {
+    return isHlc(hlc) && decodeHlc(hlc).wall <= this.now() + MAX_CLOCK_LEAD_MS
+  }
+
+  private nextSeq(tx: Tx): number {
+    const row = tx
+      .insert(counters)
+      .values({ name: 'sync', value: 1 })
+      .onConflictDoUpdate({ target: counters.name, set: { value: sqlIncrement } })
+      .returning()
+      .get()
+    return row.value
+  }
+
+  private currentSeq(): number {
+    return this.db.select().from(counters).where(eq(counters.name, 'sync')).get()?.value ?? 0
+  }
+
+  private applyProgress(
+    tx: Tx,
+    profileId: string,
+    deviceId: string,
+    c: Extract<Change, { kind: 'progress' }>,
+  ): boolean {
+    // A deleted File or Book drops the change without an error (ticket 08).
+    const file = tx.select({ bookId: files.bookId }).from(files).where(eq(files.id, c.fileId)).get()
+    if (!file) return false
+    const existing = tx
+      .select({ hlc: readingProgress.hlc })
+      .from(readingProgress)
+      .where(and(eq(readingProgress.profileId, profileId), eq(readingProgress.fileId, c.fileId)))
+      .get()
+    if (existing && compareHlc(existing.hlc, c.hlc) >= 0) return false
+    const fraction = Math.min(1, Math.max(0, c.fraction))
+    const row = { cfi: c.cfi, fraction, deviceId, hlc: c.hlc, serverSeq: this.nextSeq(tx) }
+    tx.insert(readingProgress)
+      .values({ profileId, fileId: c.fileId, ...row })
+      .onConflictDoUpdate({ target: [readingProgress.profileId, readingProgress.fileId], set: row })
+      .run()
+    this.deriveStatus(tx, profileId, file.bookId, fraction, c.hlc)
+    return true
+  }
+
+  /**
+   * Progress moves Read Status forward only (unread → reading → finished), and only when it
+   * is newer than the current status, so a status set by hand later always wins.
+   */
+  private deriveStatus(tx: Tx, profileId: string, bookId: string, fraction: number, hlc: string) {
+    const target: ReadStatus = fraction >= FINISHED_AT ? 'finished' : 'reading'
+    const current = tx
+      .select()
+      .from(readStatus)
+      .where(and(eq(readStatus.profileId, profileId), eq(readStatus.bookId, bookId)))
+      .get()
+    if (current && (rank(target) <= rank(current.status) || compareHlc(hlc, current.hlc) <= 0))
+      return
+    const row = { status: target, hlc, serverSeq: this.nextSeq(tx) }
+    tx.insert(readStatus)
+      .values({ profileId, bookId, ...row })
+      .onConflictDoUpdate({ target: [readStatus.profileId, readStatus.bookId], set: row })
+      .run()
+  }
+
+  private applyStatus(
+    tx: Tx,
+    profileId: string,
+    c: Extract<Change, { kind: 'readStatus' }>,
+  ): boolean {
+    const book = tx.select({ id: books.id }).from(books).where(eq(books.id, c.bookId)).get()
+    if (!book) return false
+    const existing = tx
+      .select({ hlc: readStatus.hlc })
+      .from(readStatus)
+      .where(and(eq(readStatus.profileId, profileId), eq(readStatus.bookId, c.bookId)))
+      .get()
+    if (existing && compareHlc(existing.hlc, c.hlc) >= 0) return false
+    const row = { status: c.status, hlc: c.hlc, serverSeq: this.nextSeq(tx) }
+    tx.insert(readStatus)
+      .values({ profileId, bookId: c.bookId, ...row })
+      .onConflictDoUpdate({ target: [readStatus.profileId, readStatus.bookId], set: row })
+      .run()
+    return true
+  }
+}

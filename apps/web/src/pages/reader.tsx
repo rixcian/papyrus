@@ -1,3 +1,4 @@
+import { compareHlc } from '@papyrus/shared'
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
@@ -8,9 +9,10 @@ import { Slider } from '@/components/ui/slider'
 import { useIsMobile } from '@/hooks/use-media-query'
 import { useSession } from '@/lib/session'
 import { FoliateReader, type FoliateReaderHandle, type TapZone } from '@/reader/foliate-reader'
-import { readLocalProgress, writeLocalProgress } from '@/reader/local-progress'
 import { TocList, TypographyPanel } from '@/reader/panels'
 import { READER_THEMES, useReaderPrefs } from '@/reader/prefs'
+import { syncEngine } from '@/sync'
+import { type LocalProgress, readLocalProgress } from '@/sync/local-progress'
 import type { RelocateDetail, TocItem } from '@/vendor/foliate-js/view.js'
 
 export function ReaderPage() {
@@ -19,6 +21,14 @@ export function ReaderPage() {
   const info = useQuery({
     queryKey: ['files', 'info', fileId],
     queryFn: () => unwrap(api.GET('/api/files/{fileId}/info', { params: { path: { fileId } } })),
+  })
+  // Best effort: offline, the reader resumes from this device's own copy.
+  const state = useQuery({
+    queryKey: ['files', 'state', fileId],
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: () => unwrap(api.GET('/api/files/{fileId}/state', { params: { path: { fileId } } })),
   })
   const blob = useQuery({
     queryKey: ['files', 'blob', fileId],
@@ -45,7 +55,7 @@ export function ReaderPage() {
     )
   if (blob.isError)
     return <ReaderMessage bookId={info.data?.bookId}>{blob.error.message}</ReaderMessage>
-  if (!info.data || !blob.data) return <ReaderMessage>Opening…</ReaderMessage>
+  if (!info.data || !blob.data || state.isPending) return <ReaderMessage>Opening…</ReaderMessage>
 
   return (
     <Reader
@@ -55,6 +65,7 @@ export function ReaderPage() {
       bookId={info.data.bookId}
       title={info.data.title}
       file={blob.data}
+      remote={state.data?.progress ?? null}
     />
   )
 }
@@ -78,16 +89,22 @@ function Reader({
   bookId,
   title,
   file,
+  remote,
 }: {
   profileId: string
   fileId: string
   bookId: string
   title: string
   file: Blob
+  remote: LocalProgress | null
 }) {
   const reader = useRef<FoliateReaderHandle>(null)
   const [prefs, setPrefs] = useReaderPrefs(profileId)
-  const [initial] = useState(() => readLocalProgress(profileId, fileId))
+  const [{ initial, offer }] = useState(() =>
+    startingPoint(readLocalProgress(profileId, fileId), remote),
+  )
+  const [jumpOffer, setJumpOffer] = useState(offer)
+  const ready = useRef(false)
   const [toc, setToc] = useState<TocItem[]>([])
   const [location, setLocation] = useState<RelocateDetail | null>(null)
   const [scrub, setScrub] = useState<number | null>(null)
@@ -100,11 +117,23 @@ function Reader({
   const onRelocate = useCallback(
     (detail: RelocateDetail) => {
       setLocation(detail)
-      if (detail.cfi)
-        writeLocalProgress(profileId, fileId, { cfi: detail.cfi, fraction: detail.fraction })
+      // Not before the initial navigation: reopening on a stale device must not overwrite a
+      // newer position from another device with a fresh timestamp.
+      if (ready.current && detail.cfi)
+        void syncEngine.record(profileId, {
+          kind: 'progress',
+          fileId,
+          cfi: detail.cfi,
+          fraction: detail.fraction,
+        })
     },
     [profileId, fileId],
   )
+
+  const onReady = useCallback((items: TocItem[]) => {
+    ready.current = true
+    setToc(items)
+  }, [])
 
   const onTap = useCallback((zone: TapZone) => {
     if (zone === 'center') return setChrome((c) => !c)
@@ -127,12 +156,33 @@ function Reader({
           file={file}
           lastLocation={initial?.cfi}
           prefs={prefs}
-          onReady={setToc}
+          onReady={onReady}
           onRelocate={onRelocate}
           onTap={onTap}
           onError={(e) => setError(e.message)}
         />
       </div>
+
+      {jumpOffer && (
+        <div
+          role="status"
+          className="absolute inset-x-0 bottom-16 z-20 mx-auto flex w-fit max-w-[calc(100vw-2rem)] items-center gap-3 rounded-xl border bg-popover px-4 py-2.5 text-popover-foreground text-sm shadow-lg"
+        >
+          <span>You were at {Math.round(jumpOffer.fraction * 100)}% on another device.</span>
+          <Button
+            size="sm"
+            onClick={() => {
+              reader.current?.goTo(jumpOffer.cfi)
+              setJumpOffer(null)
+            }}
+          >
+            Jump there
+          </Button>
+          <Button size="sm" variant="ghost" aria-label="Dismiss" onClick={() => setJumpOffer(null)}>
+            ✕
+          </Button>
+        </div>
+      )}
 
       {error && (
         <div
@@ -240,4 +290,17 @@ function Reader({
       </Sheet>
     </div>
   )
+}
+
+/**
+ * Resume from the newer of this device's copy and the server's. When another device is
+ * ahead, stay put and offer to jump instead of moving the page under the reader (ticket 08).
+ */
+function startingPoint(local: LocalProgress | null, remote: LocalProgress | null) {
+  if (!remote) return { initial: local, offer: null }
+  if (!local) return { initial: remote, offer: null }
+  const remoteNewer = compareHlc(remote.hlc, local.hlc) > 0
+  const elsewhere = remote.deviceId !== syncEngine.deviceId
+  const moved = Math.abs(remote.fraction - local.fraction) > 0.002
+  return { initial: local, offer: remoteNewer && elsewhere && moved ? remote : null }
 }

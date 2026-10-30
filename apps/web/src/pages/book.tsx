@@ -12,7 +12,10 @@ import {
   useBook,
   useDeleteBook,
   useDeleteFile,
+  useSetReadStatus,
 } from '@/lib/books'
+import { useSession } from '@/lib/session'
+import type { ReadStatus } from '@/sync'
 
 export function BookPage() {
   const { bookId = '' } = useParams()
@@ -37,7 +40,9 @@ function BookView({ book }: { book: BookDetail }) {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const readable = preferredReadable(book.files)
+  const lastRead =
+    book.lastRead && book.files.find((f) => f.id === book.lastRead?.fileId && f.readable)
+  const readable = lastRead || preferredReadable(book.files)
   const details = [
     ['Publisher', book.publisher],
     ['Published', book.publishedDate],
@@ -64,7 +69,13 @@ function BookView({ book }: { book: BookDetail }) {
         )}
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {readable && <Button render={<Link to={`/read/${readable.id}`} />}>Read</Button>}
+          {readable && (
+            <Button render={<Link to={`/read/${readable.id}`} />}>
+              {lastRead && book.lastRead
+                ? `Continue · ${Math.round(book.lastRead.fraction * 100)}%`
+                : 'Read'}
+            </Button>
+          )}
           {book.owned && (
             <>
               <Button variant="outline" onClick={() => setEditing(true)}>
@@ -76,6 +87,8 @@ function BookView({ book }: { book: BookDetail }) {
             </>
           )}
         </div>
+
+        <ReadStatusControl bookId={book.id} status={book.readStatus} />
 
         {book.tags.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-1.5">
@@ -123,6 +136,33 @@ function BookView({ book }: { book: BookDetail }) {
         }}
       />
     </div>
+  )
+}
+
+const STATUS_LABELS: Record<ReadStatus, string> = {
+  unread: 'Unread',
+  reading: 'Reading',
+  finished: 'Finished',
+}
+
+function ReadStatusControl({ bookId, status }: { bookId: string; status: ReadStatus }) {
+  const { data: profile } = useSession()
+  const setStatus = useSetReadStatus(profile?.id ?? '')
+  return (
+    <fieldset className="mt-4 flex items-center gap-1.5">
+      <legend className="sr-only">Read status</legend>
+      {(Object.keys(STATUS_LABELS) as ReadStatus[]).map((s) => (
+        <Button
+          key={s}
+          size="xs"
+          variant={s === status ? 'secondary' : 'ghost'}
+          aria-pressed={s === status}
+          onClick={() => s !== status && setStatus.mutate({ bookId, status: s })}
+        >
+          {STATUS_LABELS[s]}
+        </Button>
+      ))}
+    </fieldset>
   )
 }
 

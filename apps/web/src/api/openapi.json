@@ -526,6 +526,17 @@
     "/api/books": {
       "get": {
         "operationId": "listBooks",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["unread", "reading", "finished"]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -575,6 +586,27 @@
                           },
                           "addedAt": {
                             "type": "number"
+                          },
+                          "readStatus": {
+                            "type": "string",
+                            "enum": ["unread", "reading", "finished"]
+                          },
+                          "lastRead": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "fileId": {
+                                "type": "string"
+                              },
+                              "fraction": {
+                                "type": "number"
+                              },
+                              "at": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["fileId", "fraction", "at"],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -586,7 +618,9 @@
                           "coverUrl",
                           "formats",
                           "owned",
-                          "addedAt"
+                          "addedAt",
+                          "readStatus",
+                          "lastRead"
                         ],
                         "additionalProperties": false
                       }
@@ -651,6 +685,34 @@
                     },
                     "addedAt": {
                       "type": "number"
+                    },
+                    "readStatus": {
+                      "type": "string",
+                      "enum": ["unread", "reading", "finished"]
+                    },
+                    "lastRead": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "fileId": {
+                          "type": "string"
+                        },
+                        "fraction": {
+                          "type": "number"
+                        },
+                        "at": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["fileId", "fraction", "at"],
+                      "additionalProperties": false
+                    },
+                    "formats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                      }
                     },
                     "description": {
                       "nullable": true,
@@ -734,6 +796,9 @@
                     "coverUrl",
                     "owned",
                     "addedAt",
+                    "readStatus",
+                    "lastRead",
+                    "formats",
                     "description",
                     "language",
                     "publisher",
@@ -890,6 +955,34 @@
                     "addedAt": {
                       "type": "number"
                     },
+                    "readStatus": {
+                      "type": "string",
+                      "enum": ["unread", "reading", "finished"]
+                    },
+                    "lastRead": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "fileId": {
+                          "type": "string"
+                        },
+                        "fraction": {
+                          "type": "number"
+                        },
+                        "at": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["fileId", "fraction", "at"],
+                      "additionalProperties": false
+                    },
+                    "formats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["epub", "mobi", "azw3", "pdf", "cbz", "other"]
+                      }
+                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -972,6 +1065,9 @@
                     "coverUrl",
                     "owned",
                     "addedAt",
+                    "readStatus",
+                    "lastRead",
+                    "formats",
                     "description",
                     "language",
                     "publisher",
@@ -1295,6 +1391,273 @@
                     }
                   },
                   "required": ["id", "bookId", "title", "format", "readable", "url"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync": {
+      "post": {
+        "operationId": "sync",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "profileId": {
+                    "type": "string"
+                  },
+                  "deviceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "cursor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "changes": {
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["progress"]
+                            },
+                            "fileId": {
+                              "type": "string"
+                            },
+                            "cfi": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "fraction": {
+                              "type": "number"
+                            },
+                            "hlc": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": ["kind", "fileId", "cfi", "fraction", "hlc"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["readStatus"]
+                            },
+                            "bookId": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["unread", "reading", "finished"]
+                            },
+                            "hlc": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": ["kind", "bookId", "status", "hlc"]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["profileId", "deviceId", "cursor", "changes"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "applied": {
+                      "type": "number"
+                    },
+                    "cursor": {
+                      "type": "number"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["progress"]
+                              },
+                              "fileId": {
+                                "type": "string"
+                              },
+                              "bookId": {
+                                "type": "string"
+                              },
+                              "cfi": {
+                                "type": "string"
+                              },
+                              "fraction": {
+                                "type": "number"
+                              },
+                              "deviceId": {
+                                "type": "string"
+                              },
+                              "hlc": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "fileId",
+                              "bookId",
+                              "cfi",
+                              "fraction",
+                              "deviceId",
+                              "hlc"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["readStatus"]
+                              },
+                              "bookId": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": ["unread", "reading", "finished"]
+                              },
+                              "hlc": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "bookId", "status", "hlc"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["applied", "cursor", "records"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{fileId}/state": {
+      "get": {
+        "operationId": "getFileState",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "fileId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "progress": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "cfi": {
+                          "type": "string"
+                        },
+                        "fraction": {
+                          "type": "number"
+                        },
+                        "deviceId": {
+                          "type": "string"
+                        },
+                        "hlc": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["cfi", "fraction", "deviceId", "hlc"],
+                      "additionalProperties": false
+                    },
+                    "readStatus": {
+                      "type": "string",
+                      "enum": ["unread", "reading", "finished"]
+                    }
+                  },
+                  "required": ["progress", "readStatus"],
                   "additionalProperties": false
                 }
               }

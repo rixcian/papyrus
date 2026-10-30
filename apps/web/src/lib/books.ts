@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ApiSchemas, api, unwrap } from '@/api/client'
 import type { operations } from '@/api/schema'
+import { type ReadStatus, syncEngine } from '@/sync'
 
 export type BookSummary = Awaited<ReturnType<typeof listBooks>>['books'][number]
 export type BookDetail = Awaited<ReturnType<typeof getBook>>
@@ -19,11 +20,12 @@ export type IngestResult = {
 export const bookKeys = {
   all: ['books'] as const,
   list: ['books', 'list'] as const,
+  filtered: (status: ReadStatus | undefined) => ['books', 'list', status ?? 'all'] as const,
   detail: (id: string) => ['books', 'detail', id] as const,
 }
 
-function listBooks() {
-  return unwrap(api.GET('/api/books'))
+function listBooks(status?: ReadStatus) {
+  return unwrap(api.GET('/api/books', { params: { query: status ? { status } : {} } }))
 }
 
 function getBook(bookId: string) {
@@ -34,8 +36,27 @@ function updateBook(bookId: string, body: BookPatch) {
   return unwrap(api.PATCH('/api/books/{bookId}', { params: { path: { bookId } }, body }))
 }
 
-export function useBooks() {
-  return useQuery({ queryKey: bookKeys.list, queryFn: listBooks })
+export function useBooks(status?: ReadStatus) {
+  return useQuery({ queryKey: bookKeys.filtered(status), queryFn: () => listBooks(status) })
+}
+
+/**
+ * Read Status goes through the outbox like all reading state, so it works offline; the
+ * cached Book updates straight away (ticket 08).
+ */
+export function useSetReadStatus(profileId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ bookId, status }: { bookId: string; status: ReadStatus }) => {
+      await syncEngine.record(profileId, { kind: 'readStatus', bookId, status })
+      void syncEngine.flush(profileId)
+    },
+    onMutate: ({ bookId, status }) => {
+      queryClient.setQueryData<BookDetail>(bookKeys.detail(bookId), (b) =>
+        b ? { ...b, readStatus: status } : b,
+      )
+    },
+  })
 }
 
 export function useBook(bookId: string) {
