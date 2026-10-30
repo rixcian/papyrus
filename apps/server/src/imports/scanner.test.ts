@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { AUDIO_DIR, QUIET_SHORE } from '../test/audio-fixture.ts'
 import { buildEpub, PNG } from '../test/epub-fixture.ts'
 import { createHarness, Device, type Harness } from '../test/harness.ts'
 
@@ -161,6 +162,56 @@ describe('the import folder', () => {
     expect(fs.existsSync(path.join(folder, 'emma.epub'))).toBe(false)
     expect(fs.existsSync(calibre)).toBe(false)
     expect(fs.existsSync(folder)).toBe(true)
+  })
+
+  it('makes a folder of recordings one Audio File once all have stopped changing', async () => {
+    const { alice, scan, titles, imports, folder } = await setup()
+    const dir = path.join(folder, 'Quiet Shore')
+    fs.mkdirSync(dir)
+    for (const name of QUIET_SHORE.slice(0, 2))
+      fs.copyFileSync(path.join(AUDIO_DIR, name), path.join(dir, name))
+    await scan()
+    // The last recording arrives before the folder settled: still waiting.
+    fs.copyFileSync(
+      path.join(AUDIO_DIR, QUIET_SHORE[2] as string),
+      path.join(dir, QUIET_SHORE[2] as string),
+    )
+    await scan()
+    expect(await titles()).toEqual([])
+    await scan()
+    expect(await titles()).toEqual(['The Quiet Shore'])
+    const [book] = (await alice.request({ url: '/api/books' })).json().books
+    const detail = (await alice.request({ url: `/api/books/${book.id}` })).json()
+    expect(detail.files).toMatchObject([{ kind: 'audio', trackCount: 3 }])
+    expect((await imports()).records).toHaveLength(3)
+
+    await scan()
+    await scan()
+    expect(await titles()).toEqual(['The Quiet Shore'])
+  })
+
+  it('keeps loose untagged recordings at the top apart, and re-imports a changed one in place', async () => {
+    const { alice, scan, titles, folder } = await setup()
+    fs.copyFileSync(path.join(AUDIO_DIR, 'untagged-recording.mp3'), path.join(folder, 'first.mp3'))
+    // Different bytes, so it isn't a duplicate of the first.
+    fs.writeFileSync(
+      path.join(folder, 'second.mp3'),
+      Buffer.concat([
+        fs.readFileSync(path.join(AUDIO_DIR, 'untagged-recording.mp3')),
+        Buffer.alloc(16),
+      ]),
+    )
+    await scan()
+    await scan()
+    expect(await titles()).toEqual(['first', 'second'])
+
+    const [first] = (await alice.request({ url: '/api/books?sort=title' })).json().books
+    fs.copyFileSync(path.join(AUDIO_DIR, '02-the-lighthouse.mp3'), path.join(folder, 'first.mp3'))
+    await scan()
+    await scan()
+    expect(await titles()).toEqual(['first', 'second'])
+    const detail = (await alice.request({ url: `/api/books/${first.id}` })).json()
+    expect(detail.files).toHaveLength(2)
   })
 
   it('reports the import folder as off when none is configured', async () => {

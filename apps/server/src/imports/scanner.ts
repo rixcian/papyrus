@@ -2,9 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { and, desc, eq } from 'drizzle-orm'
 import type { FastifyBaseLogger } from 'fastify'
+import { groupTracks, isAudioName, type ProbedTrack, probeAudio } from '../books/audio.ts'
 import type { BlobStore } from '../books/blobs.ts'
 import { opfMetadata } from '../books/epub.ts'
-import type { Ingest, IngestResult } from '../books/ingest.ts'
+import type { Ingest, IngestResult, StagedTrack } from '../books/ingest.ts'
 import type { Extracted } from '../books/metadata.ts'
 import type { Db } from '../db/client.ts'
 import { type ImportRecordRow, importRecords, type ProfileRow, profiles } from '../db/schema.ts'
@@ -152,7 +153,14 @@ export class ImportScanner {
   }
 
   private async scanProfile(profile: ProfileRow, root: string): Promise<void> {
+    // Audio is imported a folder at a time: its recordings make Audio Files together.
+    const audioByDir = new Map<string, Candidate[]>()
     for (const file of this.walk(root, '')) {
+      if (isAudioName(file.rel)) {
+        const dir = path.posix.dirname(file.rel)
+        audioByDir.set(dir, [...(audioByDir.get(dir) ?? []), file])
+        continue
+      }
       const signature = `${file.size}:${file.mtimeMs}`
       const record = this.db
         .select()
@@ -170,6 +178,83 @@ export class ImportScanner {
       }
       this.pending.delete(file.abs)
       await this.importFile(profile, root, file)
+    }
+    for (const [dir, files] of audioByDir) await this.scanAudioFolder(profile, root, dir, files)
+  }
+
+  private recordOf(profileId: string, file: Candidate): ImportRecordRow | undefined {
+    return this.db
+      .select()
+      .from(importRecords)
+      .where(and(eq(importRecords.profileId, profileId), eq(importRecords.path, file.rel)))
+      .get()
+  }
+
+  private unchanged(profileId: string, file: Candidate): boolean {
+    const record = this.recordOf(profileId, file)
+    return Boolean(record && record.size === file.size && record.mtimeMs === file.mtimeMs)
+  }
+
+  /** A folder's audio waits until every recording in it has stopped changing. */
+  private async scanAudioFolder(
+    profile: ProfileRow,
+    root: string,
+    dir: string,
+    files: Candidate[],
+  ): Promise<void> {
+    const key = `audio:${path.join(root, dir)}`
+    if (files.every((f) => this.unchanged(profile.id, f))) {
+      this.pending.delete(key)
+      return
+    }
+    const signature = files.map((f) => `${f.rel}:${f.size}:${f.mtimeMs}`).join('|')
+    if (this.pending.get(key) !== signature) {
+      this.pending.set(key, signature)
+      return
+    }
+    this.pending.delete(key)
+
+    const extracted = this.calibreMetadata(path.join(root, dir))
+    const probed: (ProbedTrack & { file: Candidate })[] = []
+    for (const file of files) {
+      try {
+        probed.push({ ...(await probeAudio(file.abs, path.basename(file.abs))), file })
+      } catch (error) {
+        this.record(profile, file, {
+          status: 'failed',
+          message: `Couldn't read ${path.basename(file.abs)}: ${(error as Error).message}`,
+        })
+      }
+    }
+    // Loose recordings at the top of the folder are separate books unless tagged as one.
+    for (const group of groupTracks(probed, { untaggedApart: dir === '.' })) {
+      if (group.every((t) => this.unchanged(profile.id, t.file))) continue
+      // A changed recording re-imports its Audio File into the Book it went to before.
+      const previous = group.map((t) => this.recordOf(profile.id, t.file)?.bookId).find(Boolean)
+      const staged: (StagedTrack & { probed: ProbedTrack })[] = []
+      let result: IngestResult
+      try {
+        for (const t of group)
+          staged.push({
+            staged: await this.blobs.stageFile(t.file.abs),
+            originalName: t.originalName,
+            probed: t,
+          })
+        result = this.ingest.ingestAudio({
+          profileId: profile.id,
+          tracks: staged,
+          fallbackName: dir === '.' ? (group[0]?.originalName ?? 'Audiobook') : path.basename(dir),
+          extracted,
+          attachTo: previous ?? undefined,
+        })
+      } catch (error) {
+        for (const t of staged) this.blobs.discard(t.staged)
+        result = { status: 'failed', message: `Couldn't import: ${(error as Error).message}` }
+      }
+      for (const t of group) {
+        this.record(profile, t.file, result)
+        if (this.deleteSource && result.status !== 'failed') this.removeSource(root, t.file.abs)
+      }
     }
   }
 
@@ -216,7 +301,11 @@ export class ImportScanner {
     } catch (error) {
       result = { status: 'failed', message: `Couldn't import: ${(error as Error).message}` }
     }
+    this.record(profile, file, result)
+    if (this.deleteSource && result.status !== 'failed') this.removeSource(root, file.abs)
+  }
 
+  private record(profile: ProfileRow, file: Candidate, result: IngestResult): void {
     const record = {
       size: file.size,
       mtimeMs: file.mtimeMs,
@@ -235,8 +324,6 @@ export class ImportScanner {
       { profile: profile.name, path: file.rel, status: result.status, message: result.message },
       'imported file',
     )
-
-    if (this.deleteSource && result.status !== 'failed') this.removeSource(root, file.abs)
   }
 
   /** A Calibre book folder: one Book, with the OPF's metadata and cover.jpg (ticket 09). */

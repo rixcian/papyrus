@@ -300,3 +300,78 @@ function waitForSyncWithChanges(page: Page) {
     { timeout: 10_000 },
   )
 }
+
+test('upload an audiobook, listen, and pick up where you left off', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  page.on('pageerror', (e) => errors.push(e.message))
+  const audio = path.join(import.meta.dirname, '../apps/server/src/test/fixtures/audio')
+
+  // Its own Profile, so it doesn't depend on the journey above.
+  const profile = await (
+    await page.request.post('/api/profiles', { data: { name: 'Listener', colour: 'green' } })
+  ).json()
+  await page.request.put('/api/session/profile', { data: { profileId: profile.id } })
+  await page.goto('/')
+
+  // Recordings picked together become one Audio File, whatever order they come in.
+  await page.locator('input[type=file]').setInputFiles(
+    ['03-departure.mp3', '01-arrival.mp3', '02-the-lighthouse.mp3'].map((name) => ({
+      name,
+      mimeType: 'audio/mpeg',
+      buffer: fs.readFileSync(path.join(audio, name)),
+    })),
+  )
+  await expect(page.getByText('New audiobook The Quiet Shore')).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Has audiobook' })).toBeVisible()
+
+  await page.getByRole('link', { name: /The Quiet Shore/ }).click()
+  await expect(page.getByText(/3 Tracks/)).toBeVisible()
+  await page.getByRole('link', { name: 'Listen', exact: true }).first().click()
+  await expect(page.getByRole('heading', { name: 'The Quiet Shore' })).toBeVisible()
+
+  const elapsed = page.getByTestId('elapsed')
+  await page.getByRole('button', { name: 'Play' }).click()
+  await expect(elapsed).toHaveText('0:01', { timeout: 5_000 })
+  // The next Chapter is the next Track.
+  await page.getByRole('button', { name: 'Next chapter' }).click()
+  await expect(page.getByText('The Lighthouse')).toBeVisible()
+  await expect(elapsed).toHaveText('0:05', { timeout: 5_000 })
+  await page.getByRole('button', { name: 'Pause' }).click()
+
+  await page.getByRole('button', { name: 'Speed' }).click()
+  await page.getByRole('menuitemradio', { name: '1.5×' }).click()
+  await expect(page.getByRole('button', { name: 'Speed' })).toHaveText('1.5×')
+
+  await page.getByRole('button', { name: 'Add bookmark' }).click()
+  await expect(page.getByText(/Bookmarked 0:0[5-6]/)).toBeVisible()
+  await page.getByRole('button', { name: 'Chapters' }).click()
+  await page.getByRole('button', { name: /Arrival/ }).click()
+  await expect(elapsed).toHaveText('0:00')
+  await page.getByRole('button', { name: 'Bookmarks', exact: true }).click()
+  await page.getByRole('button', { name: /The Lighthouse/ }).click()
+  await expect(elapsed).toHaveText(/0:0[5-6]/)
+
+  // Browsing keeps it playing in the mini-player.
+  await page.getByRole('button', { name: 'Play' }).click()
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
+  await page.getByRole('link', { name: 'Papyrus' }).click()
+  const mini = page.getByRole('region', { name: 'Now playing' })
+  await expect(mini.getByRole('button', { name: 'Pause' })).toBeVisible()
+  await expect(mini).toContainText('The Lighthouse')
+  await mini.getByRole('button', { name: 'Pause' }).click()
+  await page.getByRole('button', { name: 'Has audio' }).click()
+  await expect(page).toHaveURL(/audio=true/)
+  await expect(page.getByRole('main').getByRole('link', { name: /The Quiet Shore/ })).toBeVisible()
+  await page.screenshot({ path: 'test-results/listening.png' })
+
+  // A reload resumes where it stopped, at the speed this Profile chose.
+  await mini.getByRole('link').click()
+  const stoppedAt = await elapsed.textContent()
+  await page.waitForTimeout(1_500) // let the outbox write
+  await page.reload()
+  await expect(elapsed).toHaveText(stoppedAt ?? '')
+  await expect(page.getByRole('button', { name: 'Speed' })).toHaveText('1.5×')
+
+  expect(errors).toEqual([])
+})

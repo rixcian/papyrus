@@ -103,13 +103,20 @@ export function orderTracks<T extends Pick<ProbedTrack, 'disc' | 'track' | 'orig
   )
 }
 
-/** Recordings sharing an album tag are one Audio File; untagged ones are one together. */
+/**
+ * Recordings sharing an album tag are one Audio File. Untagged ones are one together,
+ * unless `untaggedApart`, where each stands alone (loose files at the top of a folder).
+ */
 export function groupTracks<
   T extends Pick<ProbedTrack, 'album' | 'disc' | 'track' | 'originalName'>,
->(tracks: T[]): T[][] {
+>(tracks: T[], { untaggedApart = false } = {}): T[][] {
   const groups = new Map<string, T[]>()
   for (const track of tracks) {
-    const key = track.album ? foldForMatching(track.album) : ''
+    const key = track.album
+      ? `album:${foldForMatching(track.album)}`
+      : untaggedApart
+        ? `file:${track.originalName}`
+        : ''
     groups.set(key, [...(groups.get(key) ?? []), track])
   }
   return [...groups.values()].map(orderTracks)

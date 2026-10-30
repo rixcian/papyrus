@@ -1,9 +1,10 @@
 # Papyrus
 
-A self-hosted ebook library and reader for **epub**, **mobi** and **azw3**. One Docker image serves the API and the web app, which you can install on phones and computers and read offline.
+A self-hosted library, reader and audiobook player for **epub**, **mobi**, **azw3** and audiobooks (**mp3**, **m4a**, **m4b**). One Docker image serves the API and the web app, which you can install on phones and computers and use offline.
 
 - **Library**: upload or drop in books; metadata and covers are read from the files. Search, filter by author, series, tag, shelf and Read Status, in a grid or a list.
 - **Reader**: themes, fonts, paginated or scrolling, contents, search inside the book, Bookmarks, Highlights with Notes, Markdown export, and translating a selection (with DeepL).
+- **Audiobooks**: an audiobook is another File of a Book, next to its epub. Chapters, speed, a sleep timer, Bookmarks, lock-screen controls, and a mini-player that keeps playing while you browse.
 - **Profiles**: everyone in the household gets their own library, progress and highlights. Books can be Shared with other Profiles.
 - **Sync**: reading position, Highlights and Bookmarks follow you between devices, and work offline.
 - **Import folder**: drop files, or a whole Calibre library, into a folder and they are imported.
@@ -61,7 +62,7 @@ Everything is set with environment variables; all are optional.
 | `PAPYRUS_IMPORT_DIR`           | unset     | Turns on the import folder (see below)                         |
 | `PAPYRUS_IMPORT_POLL_SECONDS`  | `30`      | How often the import folder is checked                         |
 | `PAPYRUS_IMPORT_DELETE_SOURCE` | `false`   | Delete files from the import folder once imported              |
-| `PAPYRUS_MAX_UPLOAD_MB`        | `500`     | Largest file that can be uploaded                              |
+| `PAPYRUS_MAX_UPLOAD_MB`        | `2048`    | Largest file that can be uploaded (each file of an audiobook)  |
 | `PAPYRUS_TRUST_PROXY`          | `false`   | Set to `true` behind a reverse proxy                           |
 | `PAPYRUS_DEEPL_API_KEY`        | unset     | Turns on translating selections in the reader                  |
 | `LOG_LEVEL`                    | `info`    | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
@@ -71,9 +72,20 @@ Everything is set with environment variables; all are optional.
 With `PAPYRUS_IMPORT_DIR=/import` (mount a host folder there), each Profile gets its own folder, `/import/<Profile name>/`. It is created with the Profile and renamed with it. Anything you put in it, in any sub-folder, is imported into that Profile's library once it has stopped changing:
 
 - epub, mobi and azw3 become readable Books. Other files (pdf, cbz, …) are kept as downloadable Files.
+- Audio files in one folder become one audiobook, grouped by their album tag and ordered by disc, track number and file name. Loose untagged recordings at the top of your folder are each their own audiobook. A folder is imported once all of its audio has stopped changing; if you replace a recording later, the audiobook is imported again into the same Book.
 - A folder containing a `metadata.opf` is treated as a Calibre book: all of its files become one Book, with the title, authors, series and tags from the OPF and the cover from `cover.jpg`. To bring in a Calibre library, copy it (or point the mount) into your Profile's folder.
 - A file is imported once. Deleting the Book in Papyrus doesn't bring it back; changing the file does.
 - Results and failures are listed in **Settings → Imports**.
+
+### Audiobooks
+
+- **Formats**: mp3, m4a and m4b are stored and streamed as they are, with no conversion. ogg/opus are stored too, but not every browser plays them (Safari on iOS doesn't play all of them).
+- **Adding**: upload a single m4b, or select all the mp3s of a book together. Files picked together that share an album tag become one audiobook, so the upload limit applies to each file, not the whole book. The title, author, year, genre and cover come from the tags. An audiobook whose title and author match an ebook you already have is added to that Book.
+- **Chapters**: m4b chapters (and mp3 chapter frames) are used when present; otherwise each file is a chapter.
+- **Progress**: listening position syncs between devices like reading progress. A Book counts as finished in the last 30 seconds of the recording. Speed is remembered per Profile on each device.
+- **Offline**: "Make available offline" downloads the whole audiobook (it tells you the size first). Seeking works offline.
+- **Phones**: lock-screen and headphone controls use the Media Session API. Playing in the background depends on the browser; it hasn't been tested on iOS yet.
+- **Downloading**: an audiobook made of several files downloads as a zip.
 
 ### Translation
 
@@ -89,11 +101,11 @@ The selected text is sent to DeepL. Without a key, the button doesn't appear.
 
 Everything lives in `/data`:
 
-| Path                            |                                                                                     |
-| ------------------------------- | ----------------------------------------------------------------------------------- |
-| `papyrus.db` (+ `-wal`, `-shm`) | The SQLite database: Profiles, Books, Shares, shelves, reading progress, Highlights |
-| `blobs/`                        | Book files, stored once per content, named by their SHA-256. Never modified.        |
-| `covers/`                       | Cover images                                                                        |
+| Path                            |                                                                                                       |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `papyrus.db` (+ `-wal`, `-shm`) | The SQLite database: Profiles, Books, Shares, shelves, reading progress, Highlights                   |
+| `blobs/`                        | Book files and audiobook recordings, stored once per content, named by their SHA-256. Never modified. |
+| `covers/`                       | Cover images                                                                                          |
 
 Papyrus doesn't make backups itself. Two ways to take one:
 
@@ -121,14 +133,14 @@ pnpm install
 pnpm dev          # API on :8080 and the web app on :5173 (open this one)
 ```
 
-| Command          |                                                                           |
-| ---------------- | ------------------------------------------------------------------------- |
-| `pnpm check`     | Biome lint and format check (`pnpm format` fixes)                         |
-| `pnpm typecheck` | TypeScript in every package                                               |
-| `pnpm test`      | Vitest unit and API tests                                                 |
-| `pnpm build`     | Build the web app and the server bundle                                   |
-| `pnpm e2e`       | Playwright end-to-end test against the built app (run `pnpm build` first) |
-| `pnpm gen:api`   | Regenerate the web app's API types after changing a server route          |
+| Command          |                                                                            |
+| ---------------- | -------------------------------------------------------------------------- |
+| `pnpm check`     | Biome lint and format check (`pnpm format` fixes)                          |
+| `pnpm typecheck` | TypeScript in every package                                                |
+| `pnpm test`      | Vitest unit and API tests                                                  |
+| `pnpm build`     | Build the web app and the server bundle                                    |
+| `pnpm e2e`       | Playwright end-to-end tests against the built app (run `pnpm build` first) |
+| `pnpm gen:api`   | Regenerate the web app's API types after changing a server route           |
 
 The service worker only runs in a production build; `pnpm dev` doesn't register it.
 
@@ -137,7 +149,8 @@ Layout:
 - `apps/server`: Fastify API, SQLite with Drizzle migrations in `apps/server/drizzle/`.
 - `apps/web`: React app (Vite), with [foliate-js](https://github.com/johnfactotum/foliate-js) vendored in `src/vendor/` for reading.
 - `packages/shared`: code both sides use (sync clock, CFI ordering, limits).
-- `e2e`: the Playwright test, with fake Open Library and DeepL servers so it runs offline.
+- `e2e`: the Playwright tests, with fake Open Library and DeepL servers so they run offline.
+- Audio test fixtures in `apps/server/src/test/fixtures/audio` are made by `apps/server/scripts/make-audio-fixtures.sh` (needs ffmpeg) and committed, so tests don't need ffmpeg.
 
 The words the code and docs use (Profile, Book, File, Share, Offline Book, …) are defined in [`GLOSSARY.md`](GLOSSARY.md); decisions that are hard to reverse are in [`docs/adr/`](docs/adr/).
 

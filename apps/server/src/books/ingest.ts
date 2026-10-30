@@ -53,6 +53,8 @@ export interface AudioIngestInput {
   /** Title of last resort: a folder or the first file's name. */
   fallbackName: string
   extracted?: Extracted | undefined
+  /** A Book of this Profile to add it to rather than matching, as when re-importing. */
+  attachTo?: string | undefined
 }
 
 /** Uploads and imports both land here (ticket 09). */
@@ -164,6 +166,7 @@ export class Ingest {
     tracks,
     fallbackName,
     extracted: given,
+    attachTo,
   }: AudioIngestInput): IngestResult {
     const discardAll = () => {
       for (const t of tracks) this.blobs.discard(t.staged)
@@ -191,7 +194,14 @@ export class Ingest {
       : own
     const chapters = chaptersFor(probes)
     const duration = probes.reduce((sum, t) => sum + t.duration, 0)
-    const match = this.findMatch(profileId, 'audio', extracted)
+    const match =
+      (attachTo &&
+        this.db
+          .select()
+          .from(books)
+          .where(and(eq(books.id, attachTo), eq(books.ownerProfileId, profileId)))
+          .get()) ||
+      this.findMatch(profileId, 'audio', extracted)
     const now = Date.now()
     for (const t of tracks) this.blobs.commit(t.staged)
 
