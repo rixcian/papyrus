@@ -40,25 +40,30 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   // Highlight a sentence with a Note, then find it in the panel and the export.
   const section = page.frames().find((f) => f.url().startsWith('blob:') && f !== page.mainFrame())
   if (!section) throw new Error('no section iframe')
-  await section.evaluate(() => {
-    const p = [...document.querySelectorAll('p')].find((el) =>
-      el.textContent?.startsWith('Paragraph 2 '),
-    )
-    const text = p?.firstChild
-    if (!text) throw new Error('no paragraph')
-    const range = document.createRange()
-    range.setStart(text, 0)
-    range.setEnd(text, 'Paragraph 2 of Chapter Three'.length)
-    document.getSelection()?.removeAllRanges()
-    document.getSelection()?.addRange(range)
-  })
+  const select = () =>
+    section.evaluate(() => {
+      const p = [...document.querySelectorAll('p')].find((el) =>
+        el.textContent?.startsWith('Paragraph 2 '),
+      )
+      const text = p?.firstChild
+      if (!text) throw new Error('no paragraph')
+      const range = document.createRange()
+      range.setStart(text, 0)
+      range.setEnd(text, 'Paragraph 2 of Chapter Three'.length)
+      document.getSelection()?.removeAllRanges()
+      document.getSelection()?.addRange(range)
+    })
+  // Highlight first, then select the same words again for the Note: still one Highlight.
+  await select()
+  await page.getByRole('button', { name: 'Highlight green' }).click()
+  await select()
   await page.getByRole('button', { name: 'Note', exact: true }).click()
   await page.getByRole('textbox', { name: 'Note' }).fill('Worth remembering')
   await page.getByRole('button', { name: 'Save' }).click()
   await page.getByRole('button', { name: 'Bookmark this page' }).click()
   await expect(page.getByRole('button', { name: 'Remove bookmark' })).toBeVisible()
   await page.getByRole('button', { name: 'Notes', exact: true }).click()
-  await expect(page.getByText('Paragraph 2 of Chapter Three', { exact: true })).toBeVisible()
+  await expect(page.getByText('Paragraph 2 of Chapter Three', { exact: true })).toHaveCount(1)
   await expect(page.getByText('Worth remembering')).toBeVisible()
   await page.screenshot({ path: 'test-results/reader-notes.png' })
   const download = page.waitForEvent('download')
@@ -71,7 +76,12 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   expect(markdown).toBe(
     '# Arrakis Notes\n\nby Test Author\n\nParagraph 2 of Chapter Three\n\n> Worth remembering\n',
   )
+  // Delete from the panel: the Bookmark goes, the top bar follows.
+  await page.getByRole('button', { name: 'Delete bookmark' }).click()
+  await expect(page.getByRole('button', { name: 'Delete bookmark' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Delete highlight' })).toHaveCount(1)
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'Bookmark this page' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Text and layout' }).click()
   await page.getByRole('button', { name: 'Sepia' }).click()

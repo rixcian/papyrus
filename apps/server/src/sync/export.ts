@@ -46,7 +46,7 @@ export function highlightsMarkdown(
 export function exportFilename(title: string): string {
   const base =
     title
-      .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+      .replace(/[\\/:*?"<>|\p{Cc}]+/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 120) || 'Book'

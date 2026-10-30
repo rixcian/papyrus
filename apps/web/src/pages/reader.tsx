@@ -169,7 +169,22 @@ function Reader({
     [profileId],
   )
 
-  const createHighlight = (sel: BookSelection, colour: HighlightColour) => {
+  const highlightsRef = useRef(highlights)
+  highlightsRef.current = highlights
+
+  // Selecting text that is already highlighted acts on that Highlight rather than stacking
+  // a second one on top, so a later Note lands on the Highlight it was meant for.
+  const highlightAt = (sel: BookSelection) =>
+    highlightsRef.current.find((h) => contains(h.cfiRange, sel.cfi))
+
+  const createHighlight = (sel: BookSelection, colour: HighlightColour): Highlight => {
+    const existing = highlightAt(sel)
+    if (existing) {
+      if (existing.colour !== colour) void saveHighlight({ ...stripMeta(existing), colour })
+      reader.current?.clearSelection()
+      setSelection(null)
+      return { ...existing, colour }
+    }
     const h = {
       id: crypto.randomUUID(),
       fileId,
@@ -182,12 +197,10 @@ function Reader({
     void saveHighlight(h)
     reader.current?.clearSelection()
     setSelection(null)
-    return h
+    return { ...h, kind: 'highlight', profileId, hlc: '' }
   }
 
   // Several Highlights can overlap where the reader tapped; let them pick (ticket 08).
-  const highlightsRef = useRef(highlights)
-  highlightsRef.current = highlights
   const onHighlightTap = useCallback((cfi: string, rect: DOMRect) => {
     const all = highlightsRef.current
     const overlapping = all.filter((h) => overlaps(h.cfiRange, cfi))
@@ -272,8 +285,7 @@ function Reader({
             size="sm"
             variant="ghost"
             onClick={() => {
-              const h = createHighlight(selection, 'yellow')
-              setNoteFor({ ...h, kind: 'highlight', profileId, hlc: '' })
+              setNoteFor(createHighlight(selection, highlightAt(selection)?.colour ?? 'yellow'))
             }}
           >
             Note
@@ -482,6 +494,15 @@ function Reader({
                 reader.current?.goTo(cfi)
               }}
               onExport={exportHighlights}
+              onDelete={(e) =>
+                void (e.kind === 'highlight'
+                  ? saveHighlight({ ...stripMeta(e.item), deleted: true })
+                  : syncEngine.record(profileId, {
+                      kind: 'bookmark',
+                      ...stripMeta(e.item),
+                      deleted: true,
+                    }))
+              }
             />
           </SheetPanel>
         </SheetPopup>
@@ -514,6 +535,11 @@ function stripMeta<T extends { kind: string; profileId: string; hlc: string }>({
 /** Whether a point CFI falls inside a range CFI (both ends included). */
 function within(point: string, range: string): boolean {
   return compare(point, collapse(range)) >= 0 && compare(point, collapse(range, true)) <= 0
+}
+
+/** Whether range `inner` lies entirely inside range `outer`. */
+function contains(outer: string, inner: string): boolean {
+  return within(collapse(inner), outer) && within(collapse(inner, true), outer)
 }
 
 function overlaps(a: string, b: string): boolean {

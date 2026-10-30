@@ -1,4 +1,5 @@
 import { HIGHLIGHT_COLOURS, type HighlightColour, NOTE_MAX } from '@papyrus/shared'
+import { Trash2Icon } from 'lucide-react'
 import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -161,10 +162,12 @@ export function AnnotationsPanel({
   entries,
   onGo,
   onExport,
+  onDelete,
 }: {
   entries: Entry[]
   onGo: (cfi: string) => void
   onExport: () => void
+  onDelete: (entry: Entry) => void
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -175,11 +178,11 @@ export function AnnotationsPanel({
       ) : (
         <ul className="flex flex-col gap-1">
           {entries.map((e) => (
-            <li key={e.item.id}>
+            <li key={e.item.id} className="group flex items-start gap-1 rounded-lg hover:bg-accent">
               <button
                 type="button"
                 onClick={() => onGo(e.cfi)}
-                className="flex w-full gap-3 rounded-lg px-2 py-2 text-start text-sm hover:bg-accent"
+                className="flex min-w-0 flex-1 gap-3 px-2 py-2 text-start text-sm"
               >
                 {e.kind === 'highlight' ? (
                   <span
@@ -187,7 +190,7 @@ export function AnnotationsPanel({
                     style={{ background: HIGHLIGHT_FILL[e.item.colour] }}
                   />
                 ) : (
-                  <span className="shrink-0" aria-label="Bookmark">
+                  <span className="shrink-0" role="img" aria-label="Bookmark">
                     🔖
                   </span>
                 )}
@@ -202,6 +205,15 @@ export function AnnotationsPanel({
                   )}
                 </span>
               </button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className="mt-1 me-1 shrink-0 text-muted-foreground"
+                aria-label={e.kind === 'highlight' ? 'Delete highlight' : 'Delete bookmark'}
+                onClick={() => onDelete(e)}
+              >
+                <Trash2Icon />
+              </Button>
             </li>
           ))}
         </ul>
