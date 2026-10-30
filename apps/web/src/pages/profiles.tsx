@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router'
 import { ProfileAvatar } from '@/components/profile-avatar'
 import { ProfileForm } from '@/components/profile-form'
-import { Dialog } from '@/components/ui/dialog'
-import { cn } from '@/lib/cn'
+import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from '@/components/ui/dialog'
 import { useCreateProfile, useProfiles, useSession, useSwitchProfile } from '@/lib/session'
+import { cn } from '@/lib/utils'
 
 export function ProfilesPage() {
   const profiles = useProfiles()
@@ -54,14 +54,21 @@ export function ProfilesPage() {
           </li>
         </ul>
       </div>
-      <Dialog open={adding} onOpenChange={setAdding} title="Add Profile">
-        <ProfileForm
-          submitLabel="Create Profile"
-          onSubmit={async (values) => {
-            await create.mutateAsync(values)
-            navigate('/', { replace: true })
-          }}
-        />
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogPopup>
+          <DialogHeader>
+            <DialogTitle>Add Profile</DialogTitle>
+          </DialogHeader>
+          <DialogPanel>
+            <ProfileForm
+              submitLabel="Create Profile"
+              onSubmit={async (values) => {
+                await create.mutateAsync(values)
+                navigate('/', { replace: true })
+              }}
+            />
+          </DialogPanel>
+        </DialogPopup>
       </Dialog>
     </div>
   )

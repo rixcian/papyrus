@@ -3,7 +3,14 @@ import { useNavigate } from 'react-router'
 import { ApiError } from '@/api/client'
 import { ProfileForm } from '@/components/profile-form'
 import { Button } from '@/components/ui/button'
-import { Dialog } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useDeleteMyProfile, useSession, useUpdateMyProfile } from '@/lib/session'
 
@@ -51,30 +58,33 @@ function DeleteProfile({ name }: { name: string }) {
       <Button variant="destructive" onClick={() => setOpen(true)}>
         Delete {name}
       </Button>
-      <Dialog
-        open={open}
-        onOpenChange={setOpen}
-        title={`Delete ${name}?`}
-        description={`Type "${name}" to confirm.`}
-      >
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={async (e) => {
-            e.preventDefault()
-            try {
-              await remove.mutateAsync(typed)
-              navigate('/profiles', { replace: true })
-            } catch (err) {
-              setError(err instanceof ApiError ? err.message : 'Something went wrong')
-            }
-          }}
-        >
-          <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus />
-          {error && <p className="text-destructive text-sm">{error}</p>}
-          <Button type="submit" variant="destructive" disabled={!matches || remove.isPending}>
-            Delete forever
-          </Button>
-        </form>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPopup>
+          <DialogHeader>
+            <DialogTitle>Delete {name}?</DialogTitle>
+            <DialogDescription>Type "{name}" to confirm.</DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={async (e) => {
+                e.preventDefault()
+                try {
+                  await remove.mutateAsync(typed)
+                  navigate('/profiles', { replace: true })
+                } catch (err) {
+                  setError(err instanceof ApiError ? err.message : 'Something went wrong')
+                }
+              }}
+            >
+              <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus />
+              {error && <p className="text-destructive text-sm">{error}</p>}
+              <Button type="submit" variant="destructive" disabled={!matches || remove.isPending}>
+                Delete forever
+              </Button>
+            </form>
+          </DialogPanel>
+        </DialogPopup>
       </Dialog>
     </section>
   )

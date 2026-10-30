@@ -11,3 +11,4 @@ pnpm workspace (`apps/web`, `apps/server`, `packages/shared`), TS project refere
 ## Comments
 
 - 2026-10-30: done. coss ui is **not** installed yet: the agent was not allowed to run the shadcn CLI (`pnpm dlx shadcn@latest init @coss/style`). Interim primitives built on `@base-ui/react` live in `apps/web/src/components/ui/`, so official coss components can drop in. TypeScript 7 has no JS API, so openapi-typescript runs from `tools/api-codegen` with TS 5.9.
+- 2026-10-30: coss ui is now installed (`@coss/style`, all 59 components, in `apps/web/src/components/ui/`); the interim primitives are gone. The vendored registry files are excluded from Biome so `shadcn add` diffs stay clean. Fonts: `geist` (Next-only exports) was replaced with `@fontsource-variable/geist-mono`, and the theme font families were fixed to the fontsource names ("Inter Variable", "Geist Mono Variable").

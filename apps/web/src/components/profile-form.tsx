@@ -1,7 +1,7 @@
 import { PROFILE_COLOURS, PROFILE_NAME_MAX, type ProfileColour } from '@papyrus/shared'
 import { type FormEvent, useId, useState } from 'react'
 import { ApiError } from '@/api/client'
-import { cn } from '@/lib/cn'
+import { cn } from '@/lib/utils'
 import { colourClass, ProfileAvatar } from './profile-avatar'
 import { Button } from './ui/button'
 import { Input } from './ui/input'

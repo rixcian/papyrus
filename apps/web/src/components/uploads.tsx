@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { Link } from 'react-router'
 import { bookKeys, type IngestResult, uploadFile } from '@/lib/books'
-import { cn } from '@/lib/cn'
+import { cn } from '@/lib/utils'
 
 const CONCURRENCY = 3
 

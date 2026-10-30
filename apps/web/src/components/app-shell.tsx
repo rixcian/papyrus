@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate } from 'react-router'
 import { useSession } from '@/lib/session'
 import { ProfileAvatar } from './profile-avatar'
-import { Menu, MenuItem } from './ui/menu'
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/menu'
 import { UploadProvider } from './uploads'
 
 export function AppShell() {
@@ -17,20 +17,20 @@ export function AppShell() {
           </Link>
           <div className="flex-1" />
           {profile && (
-            <Menu
-              trigger={
-                <button
-                  type="button"
-                  aria-label={`${profile.name}: Profile menu`}
-                  className="rounded-full"
-                >
-                  <ProfileAvatar name={profile.name} colour={profile.colour} size="sm" />
-                </button>
-              }
-            >
-              <div className="px-3 py-2 font-medium text-sm">{profile.name}</div>
-              <MenuItem onClick={() => navigate('/settings')}>Settings</MenuItem>
-              <MenuItem onClick={() => navigate('/profiles')}>Switch Profile</MenuItem>
+            <Menu>
+              <MenuTrigger
+                aria-label={`${profile.name}: Profile menu`}
+                className="rounded-full"
+                render={<button type="button" />}
+              >
+                <ProfileAvatar name={profile.name} colour={profile.colour} size="sm" />
+              </MenuTrigger>
+              <MenuPopup align="end" sideOffset={6} className="min-w-44">
+                <div className="px-2 py-1.5 font-medium text-sm">{profile.name}</div>
+                <MenuSeparator />
+                <MenuItem onClick={() => navigate('/settings')}>Settings</MenuItem>
+                <MenuItem onClick={() => navigate('/profiles')}>Switch Profile</MenuItem>
+              </MenuPopup>
             </Menu>
           )}
         </header>
