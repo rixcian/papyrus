@@ -52,6 +52,40 @@ describe('OfflineStore', () => {
     expect(persisted).toHaveLength(1)
   })
 
+  it('stores an Audio File as its Tracks, reporting progress, never as its zip', async () => {
+    const { store, cache, fetched } = setup()
+    const track = (n: number) => ({
+      url: `/api/files/audio-1/tracks/${n}`,
+      duration: 10,
+      title: null,
+      size: 5,
+    })
+    const progress: [number, number][] = []
+    await store.save(
+      'alice',
+      {
+        ...dune,
+        coverUrl: null,
+        files: [
+          {
+            id: 'audio-1',
+            format: 'audio',
+            originalName: 'Dune',
+            size: 10,
+            audio: { duration: 20, tracks: [track(0), track(1)], chapters: [] },
+          },
+        ],
+      },
+      (done, total) => progress.push([done, total]),
+    )
+    expect(fetched).toEqual(['/api/files/audio-1/tracks/0', '/api/files/audio-1/tracks/1'])
+    expect([...cache.entries.keys()].sort()).toEqual(fetched)
+    expect(progress.at(-1)).toEqual([10, 10])
+
+    await store.remove('alice', ['book-1'])
+    expect(cache.entries.size).toBe(0)
+  })
+
   it('records nothing when a File fails to download', async () => {
     const { store } = setup(500)
     await expect(store.save('alice', { ...dune, coverUrl: null })).rejects.toThrow()

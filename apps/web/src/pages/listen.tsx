@@ -33,6 +33,7 @@ import {
 import { Sheet, SheetHeader, SheetPanel, SheetPopup, SheetTitle } from '@/components/ui/sheet'
 import { Slider } from '@/components/ui/slider'
 import { useIsMobile } from '@/hooks/use-media-query'
+import { isUnreachable } from '@/lib/offline'
 import { useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
 import { type PlayerItem, SKIP_BACK, SKIP_FORWARD, SPEEDS } from '@/player/player'
@@ -45,7 +46,7 @@ import {
   resumeTime,
 } from '@/player/timeline'
 import { useAnnotations } from '@/reader/use-annotations'
-import { syncEngine } from '@/sync'
+import { offlineStore, syncEngine } from '@/sync'
 import { readLocalProgress } from '@/sync/local-progress'
 
 const SLEEP_MINUTES = [5, 10, 15, 30, 45, 60, 90, 120]
@@ -61,7 +62,27 @@ export function ListenPage() {
   const info = useQuery({
     queryKey: ['files', 'info', fileId],
     enabled: Boolean(profileId),
-    queryFn: () => unwrap(api.GET('/api/files/{fileId}/info', { params: { path: { fileId } } })),
+    queryFn: async () => {
+      try {
+        return await unwrap(api.GET('/api/files/{fileId}/info', { params: { path: { fileId } } }))
+      } catch (error) {
+        // Offline, an Offline Book plays from what this device saved (spec: Offline).
+        const saved = isUnreachable(error)
+          ? await offlineStore.findFile(profileId, fileId)
+          : undefined
+        const audio = saved?.files.find((f) => f.id === fileId)?.audio
+        if (!saved || !audio) throw error
+        return {
+          bookId: saved.bookId,
+          title: saved.title,
+          authors: saved.authors,
+          coverUrl: saved.coverUrl,
+          duration: audio.duration,
+          tracks: audio.tracks,
+          chapters: audio.chapters,
+        }
+      }
+    },
   })
   const state = useQuery({
     queryKey: ['files', 'state', fileId],

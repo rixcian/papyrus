@@ -1,3 +1,4 @@
+import { HeadphonesIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { formatSize } from '@/lib/books'
@@ -41,8 +42,18 @@ export function ThisDevice({ profileId }: { profileId: string }) {
           <ul className="divide-y rounded-xl border">
             {books.data?.map((book) => (
               <li key={book.bookId} className="flex items-center gap-3 px-3 py-2 text-sm">
-                <Link to={`/books/${book.bookId}`} className="min-w-0 flex-1 truncate">
-                  {book.title}
+                <Link
+                  to={`/books/${book.bookId}`}
+                  className="flex min-w-0 flex-1 items-center gap-1.5"
+                >
+                  <span className="truncate">{book.title}</span>
+                  {book.files.some((f) => f.audio) && (
+                    <HeadphonesIcon
+                      role="img"
+                      aria-label="Audiobook"
+                      className="size-3.5 shrink-0 text-muted-foreground"
+                    />
+                  )}
                 </Link>
                 <span className="text-muted-foreground tabular-nums">{formatSize(book.bytes)}</span>
                 <Button

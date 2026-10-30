@@ -32,6 +32,13 @@ export function SelectionBar({
   const saveOffline = useSaveOffline(profile?.id ?? '')
   const [sharing, setSharing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [savingAudio, setSavingAudio] = useState(false)
+  const audioCount = books.filter((b) => b.formats.includes('audio')).length
+  const saveAll = () =>
+    saveOffline.mutate(
+      books.map((b) => b.id),
+      { onSuccess: onClear },
+    )
 
   return (
     <div
@@ -54,14 +61,11 @@ export function SelectionBar({
           size="sm"
           variant="outline"
           disabled={saveOffline.isPending}
-          onClick={() =>
-            saveOffline.mutate(
-              books.map((b) => b.id),
-              { onSuccess: onClear },
-            )
-          }
+          onClick={() => (audioCount ? setSavingAudio(true) : saveAll())}
         >
-          {saveOffline.isPending ? 'Saving…' : 'Make available offline'}
+          {saveOffline.isPending
+            ? `Saving…${saveOffline.progress !== null ? ` ${Math.round(saveOffline.progress * 100)}%` : ''}`
+            : 'Make available offline'}
         </Button>
       )}
       {own.length > 0 && (
@@ -101,6 +105,15 @@ export function SelectionBar({
           onSaved={onClear}
         />
       )}
+      <ConfirmDialog
+        open={savingAudio}
+        onOpenChange={setSavingAudio}
+        title={`Save ${audioCount === 1 ? 'an audiobook' : `${audioCount} audiobooks`} on this device?`}
+        description="Audiobooks are downloaded in full and can take hundreds of megabytes each. Settings → This device shows how much is stored."
+        confirmLabel="Save offline"
+        destructive={false}
+        onConfirm={async () => saveAll()}
+      />
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}

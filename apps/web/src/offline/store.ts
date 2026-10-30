@@ -1,6 +1,19 @@
 import { openDb, request, STORES } from '@/sync/db'
 import { fileCacheKey, OFFLINE_CACHE } from './caches'
 
+export interface OfflineFile {
+  id: string
+  format: string
+  originalName: string
+  size: number
+  /** An Audio File is stored as its Tracks, with what the player needs to open it offline. */
+  audio?: {
+    duration: number
+    tracks: { url: string; duration: number; title: string | null; size: number }[]
+    chapters: { title: string; start: number }[]
+  }
+}
+
 /** What the app needs to list and open an Offline Book with no connection. */
 export interface OfflineBook {
   profileId: string
@@ -9,7 +22,7 @@ export interface OfflineBook {
   authors: string[]
   coverUrl: string | null
   sharedBy: string | null
-  files: { id: string; format: string; originalName: string; size: number }[]
+  files: OfflineFile[]
   /** Bytes stored for it, Files and cover. */
   bytes: number
   savedAt: number
@@ -33,9 +46,25 @@ export interface OfflineStoreOptions {
 }
 
 const keysOf = (book: Pick<OfflineBook, 'files' | 'coverUrl'>) => [
-  ...book.files.map((f) => fileCacheKey(f.id)),
+  ...book.files.flatMap((f) => (f.audio ? f.audio.tracks.map((t) => t.url) : [fileCacheKey(f.id)])),
   ...(book.coverUrl ? [book.coverUrl] : []),
 ]
+
+/** Reports bytes as they arrive, so a long audiobook download can show progress. */
+function counted(res: Response, onBytes: (n: number) => void): Response {
+  if (!res.body) return res
+  const counter = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      onBytes(chunk.byteLength)
+      controller.enqueue(chunk)
+    },
+  })
+  return new Response(res.body.pipeThrough(counter), {
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+  })
+}
 
 /**
  * Offline Books (ticket 05): Files and covers in the Cache API, and an IndexedDB index of
@@ -88,14 +117,23 @@ export class OfflineStore {
    * Downloads the Book's Files and cover, then records it. Nothing is recorded unless every
    * File arrived, so a half-saved Book never looks available offline.
    */
-  async save(profileId: string, book: OfflineSource): Promise<OfflineBook> {
+  async save(
+    profileId: string,
+    book: OfflineSource,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<OfflineBook> {
     const first = (await this.list(profileId)).length === 0
     const cache = await this.cache()
+    const total = book.files.reduce((n, f) => n + f.size, 0)
+    let done = 0
     let bytes = 0
     for (const key of keysOf(book)) {
       const existing = await cache.match(key)
       if (existing) {
-        bytes += (await existing.clone().blob()).size
+        const size = (await existing.clone().blob()).size
+        bytes += size
+        done += size
+        onProgress?.(done, total)
         continue
       }
       const res = await this.fetchImpl(key, { credentials: 'same-origin' })
@@ -104,7 +142,15 @@ export class OfflineStore {
         throw new Error(`Couldn’t download ${key} (${res.status})`)
       }
       bytes += Number(res.headers.get('content-length')) || 0
-      await cache.put(key, res)
+      await cache.put(
+        key,
+        onProgress
+          ? counted(res, (n) => {
+              done += n
+              onProgress(Math.min(done, total), total)
+            })
+          : res,
+      )
     }
     const { id, ...fields } = book
     const record: OfflineBook = { ...fields, profileId, bookId: id, bytes, savedAt: Date.now() }

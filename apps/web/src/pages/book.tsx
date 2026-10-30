@@ -29,6 +29,7 @@ import {
 } from '@/lib/books'
 import {
   isUnreachable,
+  offlineBytes,
   offlineSupported,
   useOfflineBooks,
   useRemoveOffline,
@@ -266,12 +267,25 @@ function OfflineToggle({ book }: { book: BookDetail }) {
   const offline = useOfflineBooks(profileId)
   const save = useSaveOffline(profileId)
   const remove = useRemoveOffline(profileId)
-  if (!offlineSupported || !book.files.some((f) => f.readable) || !offline.data) return null
+  const [confirming, setConfirming] = useState(false)
+  if (
+    !offlineSupported ||
+    !book.files.some((f) => f.readable || f.kind === 'audio') ||
+    !offline.data
+  )
+    return null
   const saved = offline.data.some((b) => b.bookId === book.id)
+  const hasAudio = book.files.some((f) => f.kind === 'audio')
   if (save.isPending)
     return (
-      <Button variant="outline" disabled>
+      <Button variant="outline" disabled className="relative overflow-hidden">
         Saving for offline…
+        {save.progress !== null && ` ${Math.round(save.progress * 100)}%`}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-0.5 bg-primary transition-[width]"
+          style={{ width: `${(save.progress ?? 0) * 100}%` }}
+        />
       </Button>
     )
   return (
@@ -280,7 +294,9 @@ function OfflineToggle({ book }: { book: BookDetail }) {
         variant="outline"
         aria-pressed={saved}
         disabled={remove.isPending}
-        onClick={() => (saved ? remove.mutate([book.id]) : save.mutate([book.id]))}
+        onClick={() =>
+          saved ? remove.mutate([book.id]) : hasAudio ? setConfirming(true) : save.mutate([book.id])
+        }
       >
         {saved ? <CloudCheckIcon /> : <CloudDownloadIcon />}
         {saved ? 'Available offline' : 'Make available offline'}
@@ -288,6 +304,18 @@ function OfflineToggle({ book }: { book: BookDetail }) {
       {save.isError && (
         <p className="w-full text-destructive-foreground text-sm">{save.error.message}</p>
       )}
+      {/* Audiobooks are big; say how big before filling the device (spec: Offline). */}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Save ${formatSize(offlineBytes(book))} on this device?`}
+        description="The audiobook is downloaded in full so it plays with no connection. You can start listening while it saves."
+        confirmLabel="Save offline"
+        destructive={false}
+        onConfirm={async () => {
+          save.mutate([book.id])
+        }}
+      />
     </>
   )
 }
@@ -307,8 +335,12 @@ function OfflineBookView({ book }: { book: OfflineBook }) {
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {book.files.map((file) => (
-            <Button key={file.id} render={<Link to={`/read/${file.id}`} />}>
-              Read {book.files.length > 1 && file.format.toUpperCase()}
+            <Button
+              key={file.id}
+              render={<Link to={`/${file.audio ? 'listen' : 'read'}/${file.id}`} />}
+            >
+              {file.audio ? 'Listen' : 'Read'}{' '}
+              {book.files.length > 1 && !file.audio && file.format.toUpperCase()}
             </Button>
           ))}
         </div>

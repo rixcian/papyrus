@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { ApiError, api, unwrap } from '@/api/client'
-import type { OfflineSource } from '@/offline/store'
+import type { OfflineFile, OfflineSource } from '@/offline/store'
 import { offlineStore } from '@/sync'
 import type { BookDetail } from './books'
 
@@ -50,19 +51,47 @@ export function useOfflineBooks(profileId: string | undefined) {
   })
 }
 
-/** Readable Files only: the others can be downloaded but never opened in the reader. */
-export function offlineSource(book: BookDetail): OfflineSource {
+/**
+ * Readable and Audio Files only: the others can be downloaded but never opened. An Audio
+ * File brings its Tracks and Chapters, so the player can open it with no connection.
+ */
+export async function offlineSource(book: BookDetail): Promise<OfflineSource> {
+  const files: OfflineFile[] = []
+  for (const f of book.files) {
+    const base = { id: f.id, format: f.format, originalName: f.originalName, size: f.size }
+    if (f.readable) files.push(base)
+    else if (f.kind === 'audio') {
+      const info = await unwrap(
+        api.GET('/api/files/{fileId}/info', { params: { path: { fileId: f.id } } }),
+      )
+      files.push({
+        ...base,
+        audio: {
+          duration: info.duration ?? 0,
+          tracks: info.tracks.map(({ url, duration, title, size }) => ({
+            url,
+            duration,
+            title,
+            size,
+          })),
+          chapters: info.chapters,
+        },
+      })
+    }
+  }
   return {
     id: book.id,
     title: book.title,
     authors: book.authors,
     coverUrl: book.coverUrl,
     sharedBy: book.sharedBy,
-    files: book.files
-      .filter((f) => f.readable)
-      .map(({ id, format, originalName, size }) => ({ id, format, originalName, size })),
+    files,
   }
 }
+
+/** What saving a Book offline would store: its readable and Audio Files. */
+export const offlineBytes = (book: BookDetail) =>
+  book.files.filter((f) => f.readable || f.kind === 'audio').reduce((n, f) => n + f.size, 0)
 
 function useOfflineMutation<A>(fn: (args: A) => Promise<unknown>) {
   const queryClient = useQueryClient()
@@ -72,15 +101,27 @@ function useOfflineMutation<A>(fn: (args: A) => Promise<unknown>) {
   })
 }
 
-/** Makes Books available offline; takes ids so multi-select works without Book detail. */
+/**
+ * Makes Books available offline; takes ids so multi-select works without Book detail.
+ * `progress` is the fraction of bytes saved so far, for audiobooks that take a while.
+ */
 export function useSaveOffline(profileId: string) {
-  return useOfflineMutation(async (bookIds: string[]) => {
-    for (const bookId of bookIds) {
-      const book = await unwrap(api.GET('/api/books/{bookId}', { params: { path: { bookId } } }))
-      const source = offlineSource(book)
-      if (source.files.length) await offlineStore.save(profileId, source)
+  const [progress, setProgress] = useState<number | null>(null)
+  const mutation = useOfflineMutation(async (bookIds: string[]) => {
+    try {
+      for (const [i, bookId] of bookIds.entries()) {
+        const book = await unwrap(api.GET('/api/books/{bookId}', { params: { path: { bookId } } }))
+        const source = await offlineSource(book)
+        if (!source.files.length) continue
+        await offlineStore.save(profileId, source, (done, total) =>
+          setProgress((i + (total ? done / total : 1)) / bookIds.length),
+        )
+      }
+    } finally {
+      setProgress(null)
     }
   })
+  return Object.assign(mutation, { progress })
 }
 
 export function useRemoveOffline(profileId: string) {

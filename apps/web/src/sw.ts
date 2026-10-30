@@ -4,6 +4,7 @@ import {
   createHandlerBoundToURL,
   precacheAndRoute,
 } from 'workbox-precaching'
+import { createPartialResponse } from 'workbox-range-requests'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { OFFLINE_CACHE } from './offline/caches'
 
@@ -23,7 +24,11 @@ registerRoute(
  * there is served from it; everything else goes to the network untouched and is never
  * added, so the cache holds exactly the Offline Books.
  */
-const OFFLINE_PATHS = [/^\/api\/files\/[^/]+$/, /^\/api\/books\/[^/]+\/cover$/]
+const OFFLINE_PATHS = [
+  /^\/api\/files\/[^/]+$/,
+  /^\/api\/files\/[^/]+\/tracks\/\d+$/,
+  /^\/api\/books\/[^/]+\/cover$/,
+]
 registerRoute(
   ({ url, request, sameOrigin }) =>
     sameOrigin &&
@@ -34,7 +39,9 @@ registerRoute(
   async ({ request, url }) => {
     const cache = await caches.open(OFFLINE_CACHE)
     const hit = await cache.match(url.pathname + url.search)
-    return hit ?? fetch(request)
+    if (!hit) return fetch(request)
+    // Audio seeks with range requests; the cache holds whole recordings (spec: Offline).
+    return request.headers.has('range') ? createPartialResponse(request, hit) : hit
   },
 )
 
