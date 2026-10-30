@@ -62,7 +62,7 @@ The new tables go in migration `0008_audio`.
 ## Player
 
 - **Routes**:
-  - `/books/:id/listen/:fileId`: the full player.
+  - `/listen/:fileId`: the full player, next to the reader's `/read/:fileId`.
   - The Book page gets separate **Read** and **Listen** buttons. Listen is shown when an Audio File exists, and Read only when a readable text File exists.
   - Tapping a cover in the library resumes the File used most recently, text or audio.
 - **Engine**:
@@ -84,7 +84,7 @@ The new tables go in migration `0008_audio`.
 - **Progress**:
   - Saved through the existing outbox every 10 s while playing, and on pause, seek, Track change, page hide and closing.
   - **Resuming**: playback picks up where you left off, rewinding 5 s when more than 10 minutes have passed since you last listened.
-  - **Finishing**: reaching the last 30 s, or the end of the last Track, offers "Mark as finished", the same as the end of an ebook. The first play sets Read Status to Reading, as opening a text File does.
+  - **Finishing**: like text, the server moves Read Status forward from progress. An Audio File counts as finished when 30 s or less are left, rather than at 98%, which would leave 12 minutes of a 10-hour book. The first play sets Read Status to Reading, as opening a text File does.
 - **Bookmarks**:
   - "Add Bookmark" in the player records the current time.
   - The Bookmarks list in the player shows Chapter and time, and picking one seeks to it.

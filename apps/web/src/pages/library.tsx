@@ -222,7 +222,10 @@ export function LibraryPage() {
           <ul className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2">
             {continuing.data.map((book) => (
               <li key={book.id} className="w-28 shrink-0">
-                <Link to={`/read/${book.lastRead?.fileId}`} className="flex flex-col gap-1.5">
+                <Link
+                  to={`/${book.lastRead?.kind === 'audio' ? 'listen' : 'read'}/${book.lastRead?.fileId}`}
+                  className="flex flex-col gap-1.5"
+                >
                   <BookCover
                     title={book.title}
                     coverUrl={book.coverUrl}

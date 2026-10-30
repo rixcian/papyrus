@@ -46,7 +46,16 @@ const BookSummary = z.object({
   addedAt: z.number(),
   readStatus: z.enum(READ_STATUSES),
   /** The File read most recently and how far into it, for resuming and "Continue reading". */
-  lastRead: z.object({ fileId: z.string(), fraction: z.number(), at: z.number() }).nullable(),
+  lastRead: z
+    .object({
+      fileId: z.string(),
+      fraction: z.number(),
+      at: z.number(),
+      /** Whether that File is read or listened to; audio carries its length in seconds. */
+      kind: z.enum(['text', 'audio']),
+      duration: z.number().nullable(),
+    })
+    .nullable(),
 })
 
 const ShareBody = z.object({
@@ -160,7 +169,15 @@ export function bookRoutes({
       const last = latest.get(bookId)
       return {
         readStatus: statuses.get(bookId) ?? ('unread' as const),
-        lastRead: last ? { fileId: last.fileId, fraction: last.fraction, at: last.readAt } : null,
+        lastRead: last
+          ? {
+              fileId: last.fileId,
+              fraction: last.fraction,
+              at: last.readAt,
+              kind: last.duration == null ? ('text' as const) : ('audio' as const),
+              duration: last.duration,
+            }
+          : null,
       }
     }
   }

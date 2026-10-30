@@ -1,4 +1,10 @@
-import { CloudCheckIcon, CloudDownloadIcon, EllipsisIcon } from 'lucide-react'
+import {
+  BookOpenIcon,
+  CloudCheckIcon,
+  CloudDownloadIcon,
+  EllipsisIcon,
+  HeadphonesIcon,
+} from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { BookCover } from '@/components/book-cover'
@@ -30,6 +36,7 @@ import {
 } from '@/lib/offline'
 import { useSession } from '@/lib/session'
 import type { OfflineBook } from '@/offline/store'
+import { formatLength } from '@/player/timeline'
 import type { ReadStatus } from '@/sync'
 
 export function BookPage() {
@@ -65,6 +72,13 @@ function BookView({ book }: { book: BookDetail }) {
   const lastRead =
     book.lastRead && book.files.find((f) => f.id === book.lastRead?.fileId && f.readable)
   const readable = lastRead || preferredReadable(book.files)
+  const lastListened =
+    book.lastRead && book.files.find((f) => f.id === book.lastRead?.fileId && f.kind === 'audio')
+  const listenable = lastListened || book.files.find((f) => f.kind === 'audio')
+  const timeLeft =
+    lastListened?.duration && book.lastRead
+      ? formatLength((1 - book.lastRead.fraction) * lastListened.duration)
+      : null
   const details = [
     ['Publisher', book.publisher],
     ['Published', book.publishedDate],
@@ -98,10 +112,23 @@ function BookView({ book }: { book: BookDetail }) {
 
         <div className="mt-4 flex flex-wrap gap-2">
           {readable && (
-            <Button render={<Link to={`/read/${readable.id}`} />}>
+            <Button
+              variant={listenable && lastListened ? 'outline' : 'default'}
+              render={<Link to={`/read/${readable.id}`} />}
+            >
+              <BookOpenIcon />
               {lastRead && book.lastRead
                 ? `Continue · ${Math.round(book.lastRead.fraction * 100)}%`
                 : 'Read'}
+            </Button>
+          )}
+          {listenable && (
+            <Button
+              variant={readable && !lastListened ? 'outline' : 'default'}
+              render={<Link to={`/listen/${listenable.id}`} />}
+            >
+              <HeadphonesIcon />
+              {timeLeft ? `Listen · ${timeLeft} left` : 'Listen'}
             </Button>
           )}
           <Button

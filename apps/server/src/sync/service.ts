@@ -16,6 +16,11 @@ export type ReadStatus = (typeof READ_STATUSES)[number]
 
 /** Reading progress at or beyond this counts as finished (ticket 08). */
 export const FINISHED_AT = 0.98
+/**
+ * An Audio File is finished only in its last seconds: 98% of a ten-hour recording would
+ * still leave twelve minutes to listen to.
+ */
+export const AUDIO_FINISHED_WITHIN_SECONDS = 30
 /** Changes stamped further ahead than this are dropped, so a wrong clock can't win forever. */
 const MAX_CLOCK_LEAD_MS = 24 * 60 * 60 * 1000
 
@@ -190,19 +195,22 @@ export class SyncService {
 
   /** The most recently read File of each Book, for "Continue reading" and resuming. */
   latestProgress(profileId: string, bookIds: string[]) {
-    const out = new Map<string, { fileId: string; fraction: number; readAt: number }>()
+    const out = new Map<
+      string,
+      { fileId: string; fraction: number; readAt: number; duration: number | null }
+    >()
     if (!bookIds.length) return out
     const rows = this.db
-      .select({ p: readingProgress, bookId: files.bookId })
+      .select({ p: readingProgress, bookId: files.bookId, duration: files.duration })
       .from(readingProgress)
       .innerJoin(files, eq(files.id, readingProgress.fileId))
       .where(and(eq(readingProgress.profileId, profileId), inArray(files.bookId, bookIds)))
       .all()
-    for (const { p, bookId } of rows) {
+    for (const { p, bookId, duration } of rows) {
       const current = out.get(bookId)
       const readAt = decodeHlc(p.hlc).wall
       if (!current || readAt > current.readAt)
-        out.set(bookId, { fileId: p.fileId, fraction: p.fraction, readAt })
+        out.set(bookId, { fileId: p.fileId, fraction: p.fraction, readAt, duration })
     }
     return out
   }
@@ -232,7 +240,11 @@ export class SyncService {
     c: Extract<Change, { kind: 'progress' }>,
   ): boolean {
     // A deleted File or Book drops the change without an error (ticket 08).
-    const file = tx.select({ bookId: files.bookId }).from(files).where(eq(files.id, c.fileId)).get()
+    const file = tx
+      .select({ bookId: files.bookId, duration: files.duration })
+      .from(files)
+      .where(eq(files.id, c.fileId))
+      .get()
     if (!file) return false
     const existing = tx
       .select({ hlc: readingProgress.hlc })
@@ -246,7 +258,10 @@ export class SyncService {
       .values({ profileId, fileId: c.fileId, ...row })
       .onConflictDoUpdate({ target: [readingProgress.profileId, readingProgress.fileId], set: row })
       .run()
-    this.deriveStatus(tx, profileId, file.bookId, fraction, c.hlc)
+    const finished = file.duration
+      ? (1 - fraction) * file.duration <= AUDIO_FINISHED_WITHIN_SECONDS
+      : fraction >= FINISHED_AT
+    this.deriveStatus(tx, profileId, file.bookId, finished, c.hlc)
     return true
   }
 
@@ -254,8 +269,8 @@ export class SyncService {
    * Progress moves Read Status forward only (unread → reading → finished), and only when it
    * is newer than the current status, so a status set by hand later always wins.
    */
-  private deriveStatus(tx: Tx, profileId: string, bookId: string, fraction: number, hlc: string) {
-    const target: ReadStatus = fraction >= FINISHED_AT ? 'finished' : 'reading'
+  private deriveStatus(tx: Tx, profileId: string, bookId: string, finished: boolean, hlc: string) {
+    const target: ReadStatus = finished ? 'finished' : 'reading'
     const current = tx
       .select()
       .from(readStatus)

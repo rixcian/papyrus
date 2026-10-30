@@ -1,5 +1,6 @@
 import { encodeHlc } from '@papyrus/shared'
 import { afterEach, describe, expect, it } from 'vitest'
+import { audioFixture, multipartMany } from '../test/audio-fixture.ts'
 import { buildEpub, multipart } from '../test/epub-fixture.ts'
 import { createHarness, Device, type Harness } from '../test/harness.ts'
 
@@ -49,6 +50,35 @@ const status = (bookId: string, s: string, hlc: string) => ({
 })
 
 describe('POST /api/sync', () => {
+  it('finishes an Audio File only in its last 30 seconds, and keeps `t:` locations', async () => {
+    h = await createHarness()
+    const device = new Device(h.app)
+    const alice = await device.createProfile('Alice')
+    const { results } = (
+      await device.request({
+        method: 'POST',
+        url: '/api/uploads/audio',
+        ...multipartMany([{ filename: 'n.m4b', data: audioFixture('northern-lights.m4b') }]),
+      })
+    ).json()
+    const [file] = (await device.request({ url: `/api/books/${results[0].bookId}` })).json().files
+    // Pretend it is ten hours long.
+    h.db.$client.prepare('update files set duration = 36000 where id = ?').run(file.id)
+    const state = async () => (await device.request({ url: `/api/files/${file.id}/state` })).json()
+    const listen = (t: number, wall: number) =>
+      sync(device, alice.id, {
+        changes: [
+          { kind: 'progress', fileId: file.id, cfi: `t:${t}`, fraction: t / 36000, hlc: at(wall) },
+        ],
+      })
+
+    await listen(35_400, NOW)
+    expect((await state()).readStatus).toBe('reading')
+    expect((await state()).progress).toMatchObject({ cfi: 't:35400' })
+    await listen(35_975, NOW + 10)
+    expect((await state()).readStatus).toBe('finished')
+  })
+
   it('keeps the newest Reading Progress per File (last write wins on HLC)', async () => {
     const { device, alice, fileId } = await setup()
     await sync(device, alice.id, { changes: [progress(fileId, 0.4, at(NOW))] })

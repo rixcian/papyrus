@@ -875,6 +875,9 @@ export interface operations {
                                 fileId: string;
                                 fraction: number;
                                 at: number;
+                                /** @enum {string} */
+                                kind: "text" | "audio";
+                                duration: number | null;
                             } | null;
                         }[];
                         total: number;
@@ -952,6 +955,9 @@ export interface operations {
                             fileId: string;
                             fraction: number;
                             at: number;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
                         } | null;
                         formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;
@@ -1100,6 +1106,9 @@ export interface operations {
                             fileId: string;
                             fraction: number;
                             at: number;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
                         } | null;
                         formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;
@@ -1291,6 +1300,9 @@ export interface operations {
                             fileId: string;
                             fraction: number;
                             at: number;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
                         } | null;
                         formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;
@@ -1402,6 +1414,9 @@ export interface operations {
                             fileId: string;
                             fraction: number;
                             at: number;
+                            /** @enum {string} */
+                            kind: "text" | "audio";
+                            duration: number | null;
                         } | null;
                         formats: ("epub" | "mobi" | "azw3" | "pdf" | "cbz" | "audio" | "other")[];
                         description: string | null;

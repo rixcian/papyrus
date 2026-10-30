@@ -778,9 +778,17 @@
                               },
                               "at": {
                                 "type": "number"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": ["text", "audio"]
+                              },
+                              "duration": {
+                                "nullable": true,
+                                "type": "number"
                               }
                             },
-                            "required": ["fileId", "fraction", "at"],
+                            "required": ["fileId", "fraction", "at", "kind", "duration"],
                             "additionalProperties": false
                           }
                         },
@@ -964,9 +972,17 @@
                         },
                         "at": {
                           "type": "number"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["text", "audio"]
+                        },
+                        "duration": {
+                          "nullable": true,
+                          "type": "number"
                         }
                       },
-                      "required": ["fileId", "fraction", "at"],
+                      "required": ["fileId", "fraction", "at", "kind", "duration"],
                       "additionalProperties": false
                     },
                     "formats": {
@@ -1302,9 +1318,17 @@
                         },
                         "at": {
                           "type": "number"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["text", "audio"]
+                        },
+                        "duration": {
+                          "nullable": true,
+                          "type": "number"
                         }
                       },
-                      "required": ["fileId", "fraction", "at"],
+                      "required": ["fileId", "fraction", "at", "kind", "duration"],
                       "additionalProperties": false
                     },
                     "formats": {
@@ -1832,9 +1856,17 @@
                         },
                         "at": {
                           "type": "number"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["text", "audio"]
+                        },
+                        "duration": {
+                          "nullable": true,
+                          "type": "number"
                         }
                       },
-                      "required": ["fileId", "fraction", "at"],
+                      "required": ["fileId", "fraction", "at", "kind", "duration"],
                       "additionalProperties": false
                     },
                     "formats": {
@@ -2143,9 +2175,17 @@
                         },
                         "at": {
                           "type": "number"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": ["text", "audio"]
+                        },
+                        "duration": {
+                          "nullable": true,
+                          "type": "number"
                         }
                       },
-                      "required": ["fileId", "fraction", "at"],
+                      "required": ["fileId", "fraction", "at", "kind", "duration"],
                       "additionalProperties": false
                     },
                     "formats": {

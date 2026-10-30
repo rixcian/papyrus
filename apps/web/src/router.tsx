@@ -3,10 +3,12 @@ import { AppShell } from './components/app-shell'
 import { useProfiles, useSession } from './lib/session'
 import { BookPage } from './pages/book'
 import { LibraryPage } from './pages/library'
+import { ListenPage } from './pages/listen'
 import { ProfilesPage } from './pages/profiles'
 import { ReaderPage } from './pages/reader'
 import { SettingsPage } from './pages/settings'
 import { WelcomePage } from './pages/welcome'
+import { PlayerProvider } from './player/provider'
 import { useSync } from './sync'
 
 function FullPageMessage({ children }: { children: string }) {
@@ -27,7 +29,11 @@ function RequireProfile() {
     if (session.isFetching) return <FullPageMessage>Loading…</FullPageMessage>
     return <Navigate to="/profiles" replace />
   }
-  return <Outlet />
+  return (
+    <PlayerProvider>
+      <Outlet />
+    </PlayerProvider>
+  )
 }
 
 export const router = createBrowserRouter([
@@ -37,6 +43,7 @@ export const router = createBrowserRouter([
     element: <RequireProfile />,
     children: [
       { path: 'read/:fileId', element: <ReaderPage /> },
+      { path: 'listen/:fileId', element: <ListenPage /> },
       {
         element: <AppShell />,
         children: [
