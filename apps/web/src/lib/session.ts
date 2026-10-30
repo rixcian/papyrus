@@ -34,14 +34,20 @@ export function useSession() {
   })
 }
 
-function useSessionMutation<A>(fn: (args: A) => Promise<unknown>) {
+/**
+ * Every mutation here changes which Profile is active (or what it looks like). The result
+ * goes straight into the session cache, so guards never read a stale Active Profile.
+ */
+function useSessionMutation<A>(fn: (args: A) => Promise<Profile | null>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: fn,
-    onSuccess: async () => {
+    onSuccess: async (profile) => {
       // Everything cached belongs to the previous Active Profile.
-      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'session' })
-      await queryClient.invalidateQueries({ queryKey: sessionKeys.session })
+      queryClient.removeQueries({
+        predicate: (q) => q.queryKey[0] !== 'session' && q.queryKey[0] !== 'profiles',
+      })
+      queryClient.setQueryData(sessionKeys.session, profile)
       await queryClient.invalidateQueries({ queryKey: sessionKeys.profiles })
       announceProfileChange()
     },
@@ -50,24 +56,24 @@ function useSessionMutation<A>(fn: (args: A) => Promise<unknown>) {
 
 export function useCreateProfile() {
   return useSessionMutation((body: { name: string; colour: ProfileColour }) =>
-    unwrap(api.POST('/api/profiles', { body })),
+    unwrap(api.POST('/api/profiles', { body })).then((p) => p as Profile),
   )
 }
 
 export function useSwitchProfile() {
   return useSessionMutation((profileId: string) =>
-    unwrap(api.PUT('/api/session/profile', { body: { profileId } })),
+    unwrap(api.PUT('/api/session/profile', { body: { profileId } })).then((p) => p as Profile),
   )
 }
 
 export function useUpdateMyProfile() {
   return useSessionMutation((body: { name?: string; colour?: ProfileColour }) =>
-    unwrap(api.PATCH('/api/profiles/me', { body })),
+    unwrap(api.PATCH('/api/profiles/me', { body })).then((p) => p as Profile),
   )
 }
 
 export function useDeleteMyProfile() {
   return useSessionMutation((confirmName: string) =>
-    unwrap(api.DELETE('/api/profiles/me', { body: { confirmName } })),
+    unwrap(api.DELETE('/api/profiles/me', { body: { confirmName } })).then(() => null),
   )
 }

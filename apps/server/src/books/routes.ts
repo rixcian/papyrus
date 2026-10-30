@@ -335,6 +335,38 @@ export function bookRoutes({
       },
     )
 
+    app.get(
+      '/api/files/:fileId/info',
+      {
+        schema: {
+          operationId: 'getFileInfo',
+          params: FileParams,
+          response: {
+            200: z.object({
+              id: z.string(),
+              bookId: z.string(),
+              title: z.string(),
+              format: Format,
+              readable: z.boolean(),
+              url: z.string(),
+            }),
+            404: ErrorBody,
+          },
+        },
+      },
+      async (request) => {
+        const { file, book } = library.visibleFile(request.profile.id, request.params.fileId)
+        return {
+          id: file.id,
+          bookId: book.id,
+          title: book.title,
+          format: file.format as FileFormat,
+          readable: READABLE_FORMATS.has(file.format as FileFormat),
+          url: `/api/files/${file.id}`,
+        }
+      },
+    )
+
     app.delete(
       '/api/files/:fileId',
       {

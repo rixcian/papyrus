@@ -17,7 +17,8 @@
       "!apps/web/src/components/ui",
       "!apps/web/src/hooks",
       "!apps/web/src/lib/utils.ts",
-      "!apps/web/src/lib/composer-*.ts"
+      "!apps/web/src/lib/composer-*.ts",
+      "!apps/web/src/vendor"
     ]
   },
   "formatter": {

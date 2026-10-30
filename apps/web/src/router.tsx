@@ -4,6 +4,7 @@ import { useProfiles, useSession } from './lib/session'
 import { BookPage } from './pages/book'
 import { LibraryPage } from './pages/library'
 import { ProfilesPage } from './pages/profiles'
+import { ReaderPage } from './pages/reader'
 import { SettingsPage } from './pages/settings'
 import { WelcomePage } from './pages/welcome'
 
@@ -19,7 +20,11 @@ function RequireProfile() {
   if (profiles.isError || session.isError)
     return <FullPageMessage>Can't reach the Papyrus server.</FullPageMessage>
   if (profiles.data.length === 0) return <Navigate to="/welcome" replace />
-  if (!session.data) return <Navigate to="/profiles" replace />
+  if (!session.data) {
+    // A stale "no Active Profile" may be refetching; don't bounce to the picker on it.
+    if (session.isFetching) return <FullPageMessage>Loading…</FullPageMessage>
+    return <Navigate to="/profiles" replace />
+  }
   return <Outlet />
 }
 
@@ -29,6 +34,7 @@ export const router = createBrowserRouter([
   {
     element: <RequireProfile />,
     children: [
+      { path: 'read/:fileId', element: <ReaderPage /> },
       {
         element: <AppShell />,
         children: [

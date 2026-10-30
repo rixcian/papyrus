@@ -131,6 +131,20 @@ describe('Files', () => {
     expect(download.headers['content-disposition']).toBe("attachment; filename*=UTF-8''dune.epub")
   })
 
+  it('describes a File for the reader', async () => {
+    const { alice, bookId } = await setup()
+    const [file] = (await alice.request({ url: `/api/books/${bookId}` })).json().files
+    const info = await alice.request({ url: `/api/files/${file.id}/info` })
+    expect(info.json()).toEqual({
+      id: file.id,
+      bookId,
+      title: 'Dune',
+      format: 'epub',
+      readable: true,
+      url: file.url,
+    })
+  })
+
   it('removes a File and its blob, but never the last File', async () => {
     const { alice, bookId } = await setup()
     expect((await upload(alice, 'dune.mobi', duneMobi())).bookId).toBe(bookId)

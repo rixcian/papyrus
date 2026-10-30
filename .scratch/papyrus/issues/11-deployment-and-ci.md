@@ -36,3 +36,7 @@ Decided by the agent: on 2026-10-30 the user handed the remaining decisions to t
   - On a tag `v*.*.*`: push `X.Y.Z`, `X.Y` and `latest`.
   - amd64 only, using `docker/build-push-action` with the GHA cache.
 - **Lint/format**: Biome, one tool for both.
+
+## Comments
+
+- 2026-10-30 (slice 09): the CSP above needs `blob:` in `style-src` as well, because foliate-js loads a book's own stylesheets as blob URLs. `apps/server/src/plugins/security.ts` is the source of truth.

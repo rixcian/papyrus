@@ -13,12 +13,16 @@
     "format": "biome check --write .",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "gen:api": "pnpm --filter @papyrus/server gen:openapi && pnpm --filter @papyrus/web gen:api"
+    "gen:api": "pnpm --filter @papyrus/server gen:openapi && pnpm --filter @papyrus/web gen:api",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
+    "@playwright/test": "1.64.1",
     "@types/node": "^24",
+    "@types/yazl": "3.3.1",
     "typescript": "7.0.2",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "yazl": "3.3.1"
   }
 }

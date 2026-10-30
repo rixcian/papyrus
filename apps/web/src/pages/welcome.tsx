@@ -8,7 +8,8 @@ export function WelcomePage() {
   const create = useCreateProfile()
   const navigate = useNavigate()
 
-  if (profiles.data && profiles.data.length > 0) return <Navigate to="/profiles" replace />
+  // "/" rather than the picker: creating the first Profile also made it the Active Profile.
+  if (profiles.data && profiles.data.length > 0) return <Navigate to="/" replace />
 
   return (
     <div className="grid min-h-dvh place-items-center p-6">

@@ -37,6 +37,7 @@ function BookView({ book }: { book: BookDetail }) {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  const readable = preferredReadable(book.files)
   const details = [
     ['Publisher', book.publisher],
     ['Published', book.publishedDate],
@@ -62,16 +63,19 @@ function BookView({ book }: { book: BookDetail }) {
           <p className="mt-1 text-muted-foreground text-sm">Shared by {book.ownerName}</p>
         )}
 
-        {book.owned && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setEditing(true)}>
-              Edit metadata
-            </Button>
-            <Button variant="destructive-outline" onClick={() => setDeleting(true)}>
-              Delete
-            </Button>
-          </div>
-        )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {readable && <Button render={<Link to={`/read/${readable.id}`} />}>Read</Button>}
+          {book.owned && (
+            <>
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                Edit metadata
+              </Button>
+              <Button variant="destructive-outline" onClick={() => setDeleting(true)}>
+                Delete
+              </Button>
+            </>
+          )}
+        </div>
 
         {book.tags.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-1.5">
@@ -122,6 +126,15 @@ function BookView({ book }: { book: BookDetail }) {
   )
 }
 
+const READ_PREFERENCE = ['epub', 'azw3', 'mobi']
+
+/** Slice 10 makes this the File read most recently; until then epub before azw3 before mobi. */
+function preferredReadable(files: BookFile[]): BookFile | undefined {
+  return files
+    .filter((f) => f.readable)
+    .sort((a, b) => READ_PREFERENCE.indexOf(a.format) - READ_PREFERENCE.indexOf(b.format))[0]
+}
+
 function FileRow({ file, canRemove }: { file: BookFile; canRemove: boolean }) {
   const deleteFile = useDeleteFile()
   const [removing, setRemoving] = useState(false)
@@ -133,6 +146,11 @@ function FileRow({ file, canRemove }: { file: BookFile; canRemove: boolean }) {
       </Badge>
       <span className="min-w-0 flex-1 truncate">{file.originalName}</span>
       <span className="text-muted-foreground tabular-nums">{formatSize(file.size)}</span>
+      {file.readable && (
+        <Button variant="ghost" size="sm" render={<Link to={`/read/${file.id}`} />}>
+          Read
+        </Button>
+      )}
       <Button variant="ghost" size="sm" render={<a href={`${file.url}?download=1`} download />}>
         Download
       </Button>

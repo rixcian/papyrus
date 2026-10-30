@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify'
 
 // foliate-js renders books in blob: iframes that inherit this policy, which keeps
-// scripts inside books from running (see ticket 11).
+// scripts inside books from running (see ticket 11). It loads a book's own stylesheets,
+// images and fonts as blob: URLs, so those are allowed.
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' blob:",
   "img-src 'self' blob: data:",
   "font-src 'self' blob: data:",
   "media-src 'self' blob:",
