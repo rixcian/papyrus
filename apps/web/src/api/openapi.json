@@ -530,10 +530,72 @@
           {
             "schema": {
               "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
               "enum": ["unread", "reading", "finished"]
             },
             "in": "query",
             "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "author",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "series",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "tag",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["added", "title", "author", "series", "recent", "relevance"]
+            },
+            "in": "query",
+            "name": "sort",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 60,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
             "required": false
           }
         ],
@@ -624,9 +686,85 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "nextCursor": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
-                  "required": ["books"],
+                  "required": ["books", "total", "nextCursor"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/facets": {
+      "get": {
+        "operationId": "getBookFacets",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["name", "count"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "series": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["name", "count"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        },
+                        "required": ["name", "count"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["authors", "series", "tags"],
                   "additionalProperties": false
                 }
               }
@@ -1452,6 +1590,93 @@
                           "properties": {
                             "kind": {
                               "type": "string",
+                              "enum": ["bookmark"]
+                            },
+                            "id": {
+                              "type": "string",
+                              "minLength": 8,
+                              "maxLength": 64
+                            },
+                            "fileId": {
+                              "type": "string"
+                            },
+                            "cfi": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "snippet": {
+                              "type": "string",
+                              "maxLength": 500
+                            },
+                            "deleted": {
+                              "type": "boolean"
+                            },
+                            "hlc": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": ["kind", "id", "fileId", "cfi", "snippet", "deleted", "hlc"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["highlight"]
+                            },
+                            "id": {
+                              "type": "string",
+                              "minLength": 8,
+                              "maxLength": 64
+                            },
+                            "fileId": {
+                              "type": "string"
+                            },
+                            "cfiRange": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4000
+                            },
+                            "colour": {
+                              "type": "string",
+                              "enum": ["yellow", "green", "blue", "pink"]
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 10000
+                            },
+                            "note": {
+                              "nullable": true,
+                              "type": "string",
+                              "maxLength": 10000
+                            },
+                            "deleted": {
+                              "type": "boolean"
+                            },
+                            "hlc": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id",
+                            "fileId",
+                            "cfiRange",
+                            "colour",
+                            "text",
+                            "note",
+                            "deleted",
+                            "hlc"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
                               "enum": ["progress"]
                             },
                             "fileId": {
@@ -1520,6 +1745,110 @@
                       "type": "array",
                       "items": {
                         "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["bookmark"]
+                              },
+                              "bookId": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string",
+                                "minLength": 8,
+                                "maxLength": 64
+                              },
+                              "fileId": {
+                                "type": "string"
+                              },
+                              "cfi": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              },
+                              "snippet": {
+                                "type": "string",
+                                "maxLength": 500
+                              },
+                              "deleted": {
+                                "type": "boolean"
+                              },
+                              "hlc": {
+                                "type": "string",
+                                "maxLength": 200
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "bookId",
+                              "id",
+                              "fileId",
+                              "cfi",
+                              "snippet",
+                              "deleted",
+                              "hlc"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["highlight"]
+                              },
+                              "bookId": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string",
+                                "minLength": 8,
+                                "maxLength": 64
+                              },
+                              "fileId": {
+                                "type": "string"
+                              },
+                              "cfiRange": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4000
+                              },
+                              "colour": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string",
+                                "maxLength": 10000
+                              },
+                              "note": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 10000
+                              },
+                              "deleted": {
+                                "type": "boolean"
+                              },
+                              "hlc": {
+                                "type": "string",
+                                "maxLength": 200
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "bookId",
+                              "id",
+                              "fileId",
+                              "cfiRange",
+                              "colour",
+                              "text",
+                              "note",
+                              "deleted",
+                              "hlc"
+                            ],
+                            "additionalProperties": false
+                          },
                           {
                             "type": "object",
                             "properties": {
@@ -1682,6 +2011,26 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/books/{bookId}/highlights.md": {
+      "get": {
+        "operationId": "exportHighlights",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "bookId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         }
       }

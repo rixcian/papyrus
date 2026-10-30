@@ -12,7 +12,11 @@ const chapter = (n: number, title: string) => {
 }
 
 /** A small but real epub: three chapters, an EPUB 3 nav, enough text to paginate. */
-export async function buildReadableEpub(): Promise<Buffer> {
+export async function buildReadableEpub({
+  title = 'Arrakis Notes',
+  author = 'Test Author',
+  tags = [] as string[],
+} = {}): Promise<Buffer> {
   const titles = ['Chapter One', 'Chapter Two', 'Chapter Three']
   const zip = new yazl.ZipFile()
   zip.addBuffer(Buffer.from('application/epub+zip'), 'mimetype', { compress: false })
@@ -33,7 +37,7 @@ export async function buildReadableEpub(): Promise<Buffer> {
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">urn:uuid:3f1c2d4e-0000-4000-8000-000000000001</dc:identifier>
-    <dc:title>Arrakis Notes</dc:title><dc:creator>Test Author</dc:creator><dc:language>en</dc:language>
+    <dc:title>${title}</dc:title><dc:creator>${author}</dc:creator>${tags.map((t) => `<dc:subject>${t}</dc:subject>`).join('')}<dc:language>en</dc:language>
     <meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>
   </metadata>
   <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${items}</manifest>

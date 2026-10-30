@@ -1,28 +1,98 @@
-import { useRef } from 'react'
+import { LayoutGridIcon, ListIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { BookCover } from '@/components/book-cover'
+import { BookViews, type LibraryLayout } from '@/components/book-views'
+import { LibraryFilters } from '@/components/library-filters'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Sheet, SheetHeader, SheetPanel, SheetPopup, SheetTitle } from '@/components/ui/sheet'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useUploads } from '@/components/uploads'
-import { type BookSummary, useBooks } from '@/lib/books'
+import { useMediaQuery } from '@/hooks/use-media-query'
+import { type BookSort, type LibraryQuery, useBookList, useContinueReading } from '@/lib/books'
 import type { ReadStatus } from '@/sync'
 
-const FILTERS: { value: ReadStatus | undefined; label: string }[] = [
-  { value: undefined, label: 'All' },
-  { value: 'unread', label: 'Unread' },
-  { value: 'reading', label: 'Reading' },
-  { value: 'finished', label: 'Finished' },
+const SORTS: { value: BookSort; label: string }[] = [
+  { value: 'relevance', label: 'Best match' },
+  { value: 'added', label: 'Recently added' },
+  { value: 'title', label: 'Title' },
+  { value: 'author', label: 'Author' },
+  { value: 'series', label: 'Series' },
 ]
+const STATUS_LABELS: Record<ReadStatus, string> = {
+  unread: 'Unread',
+  reading: 'Reading',
+  finished: 'Finished',
+}
+const LAYOUT_KEY = 'papyrus.libraryLayout'
 
 const isStatus = (v: string | null): v is ReadStatus =>
   v === 'unread' || v === 'reading' || v === 'finished'
+const isSort = (v: string | null): v is BookSort => SORTS.some((s) => s.value === v)
+
+/** Search, filters and sort live in the URL, so they survive reloads and Back (ticket 06). */
+function useLibraryQuery(): [LibraryQuery, (patch: Partial<LibraryQuery>) => void] {
+  const [params, setParams] = useSearchParams()
+  const get = (key: string) => params.get(key) || undefined
+  const status = params.get('status')
+  const sort = params.get('sort')
+  const query: LibraryQuery = {
+    ...(get('q') && { q: get('q') }),
+    ...(isStatus(status) && { status }),
+    ...(get('author') && { author: get('author') }),
+    ...(get('series') && { series: get('series') }),
+    ...(get('tag') && { tag: get('tag') }),
+    ...(isSort(sort) && { sort }),
+  }
+  const update = useCallback(
+    (patch: Partial<LibraryQuery>) =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          for (const [key, value] of Object.entries(patch)) {
+            if (value) next.set(key, String(value))
+            else next.delete(key)
+          }
+          return next
+        },
+        { replace: 'q' in patch },
+      ),
+    [setParams],
+  )
+  return [query, update]
+}
+
+function useLayout(): [LibraryLayout, (layout: LibraryLayout) => void] {
+  const [layout, setLayout] = useState<LibraryLayout>(() =>
+    localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'grid',
+  )
+  return [
+    layout,
+    (next) => {
+      localStorage.setItem(LAYOUT_KEY, next)
+      setLayout(next)
+    },
+  ]
+}
 
 export function LibraryPage() {
-  const [params, setParams] = useSearchParams()
-  const raw = params.get('status')
-  const status = isStatus(raw) ? raw : undefined
-  const books = useBooks(status)
+  const [query, update] = useLibraryQuery()
+  const [layout, setLayout] = useLayout()
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const wide = useMediaQuery('lg')
+  const list = useBookList(query)
+  const continuing = useContinueReading()
   const { addFiles } = useUploads()
   const input = useRef<HTMLInputElement>(null)
+
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = list
+  const loadMore = useCallback(() => {
+    if (!isFetchingNextPage) void fetchNextPage()
+  }, [fetchNextPage, isFetchingNextPage])
+  const search = useCallback((q: string) => update({ q }), [update])
 
   const picker = (
     <>
@@ -40,11 +110,15 @@ export function LibraryPage() {
     </>
   )
 
-  if (books.isPending) return null
-  if (books.isError)
+  if (list.isPending) return null
+  if (list.isError)
     return <p className="text-destructive-foreground">Couldn't load your library.</p>
 
-  if (books.data.books.length === 0 && !status)
+  const filtered = Object.keys(query).some((k) => k !== 'sort')
+  const books = list.data.pages.flatMap((p) => p.books)
+  const total = list.data.pages[0]?.total ?? 0
+
+  if (total === 0 && !filtered)
     return (
       <div className="grid place-items-center py-24 text-center">
         <div className="flex flex-col items-center gap-4">
@@ -60,21 +134,32 @@ export function LibraryPage() {
       </div>
     )
 
-  // Books being read, most recently read first (ticket 10).
-  const continuing = status
-    ? []
-    : books.data.books
-        .filter((b) => b.readStatus === 'reading' && b.lastRead)
-        .sort((a, b) => (b.lastRead?.at ?? 0) - (a.lastRead?.at ?? 0))
-        .slice(0, 12)
+  const filters = (
+    <LibraryFilters
+      query={query}
+      onChange={(patch) => {
+        update(patch)
+        setFiltersOpen(false)
+      }}
+    />
+  )
+  const chips = (
+    [
+      ['status', query.status && STATUS_LABELS[query.status]],
+      ['author', query.author],
+      ['series', query.series],
+      ['tag', query.tag],
+    ] as const
+  ).filter(([, label]) => label)
+  const sort = query.sort ?? (query.q ? 'relevance' : query.series ? 'series' : 'added')
 
   return (
     <div className="flex flex-col gap-8">
-      {continuing.length > 0 && (
+      {!filtered && continuing.data && continuing.data.length > 0 && (
         <section>
           <h2 className="mb-3 font-semibold">Continue reading</h2>
           <ul className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-2">
-            {continuing.map((book) => (
+            {continuing.data.map((book) => (
               <li key={book.id} className="w-28 shrink-0">
                 <Link to={`/read/${book.lastRead?.fileId}`} className="flex flex-col gap-1.5">
                   <BookCover
@@ -90,65 +175,133 @@ export function LibraryPage() {
         </section>
       )}
 
-      <section>
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <h1 className="font-semibold text-xl">Library</h1>
-          <fieldset className="flex gap-1">
-            <legend className="sr-only">Filter by read status</legend>
-            {FILTERS.map((f) => (
-              <Button
-                key={f.label}
-                size="xs"
-                variant={f.value === status ? 'secondary' : 'ghost'}
-                aria-pressed={f.value === status}
-                onClick={() => setParams(f.value ? { status: f.value } : {})}
-              >
-                {f.label}
-              </Button>
-            ))}
-          </fieldset>
-          <div className="flex-1" />
-          {picker}
-        </div>
-        {books.data.books.length === 0 ? (
-          <p className="py-12 text-center text-muted-foreground text-sm">No Books here.</p>
-        ) : (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-4 gap-y-6">
-            {books.data.books.map((book) => (
-              <BookCard key={book.id} book={book} />
-            ))}
-          </ul>
+      <div className="grid gap-8 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        {wide && (
+          <aside className="sticky top-20 max-h-[calc(100dvh-6rem)] self-start overflow-y-auto">
+            {filters}
+          </aside>
         )}
-      </section>
+
+        <section className="min-w-0">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h1 className="font-semibold text-xl">Library</h1>
+            {picker}
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <SearchBox value={query.q ?? ''} onChange={search} />
+            {!wide && (
+              <Button variant="outline" onClick={() => setFiltersOpen(true)}>
+                <SlidersHorizontalIcon />
+                Filters
+                {chips.length > 0 && <Badge variant="secondary">{chips.length}</Badge>}
+              </Button>
+            )}
+            <Select
+              items={SORTS.filter((s) => s.value !== 'relevance' || query.q)}
+              value={sort}
+              onValueChange={(value) => update({ sort: value as BookSort })}
+            >
+              <SelectTrigger className="w-auto min-w-36" aria-label="Sort by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectPopup>
+                {SORTS.filter((s) => s.value !== 'relevance' || query.q).map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
+            <span>
+              {total} {total === 1 ? 'Book' : 'Books'}
+            </span>
+            {chips.map(([key, label]) => (
+              <Badge key={key} variant="outline" className="gap-1">
+                {label}
+                <button
+                  type="button"
+                  aria-label={`Clear ${key} filter`}
+                  onClick={() => update({ [key]: undefined })}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </Badge>
+            ))}
+            <ToggleGroup
+              variant="outline"
+              size="sm"
+              className="ms-auto"
+              value={[layout]}
+              onValueChange={(value) => value[0] && setLayout(value[0] as LibraryLayout)}
+            >
+              <ToggleGroupItem value="grid" aria-label="Grid">
+                <LayoutGridIcon />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="List">
+                <ListIcon />
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+
+          {total === 0 ? (
+            <p className="py-12 text-center text-muted-foreground text-sm">No Books match.</p>
+          ) : (
+            <BookViews
+              books={books}
+              total={total}
+              layout={layout}
+              hasMore={hasNextPage}
+              loadMore={loadMore}
+            />
+          )}
+        </section>
+      </div>
+
+      {!wide && (
+        <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <SheetPopup side="left">
+            <SheetHeader>
+              <SheetTitle>Filters</SheetTitle>
+            </SheetHeader>
+            <SheetPanel>{filters}</SheetPanel>
+          </SheetPopup>
+        </Sheet>
+      )}
     </div>
   )
 }
 
-function BookCard({ book }: { book: BookSummary }) {
+/** Typing updates the URL after a short pause, not on every key. */
+function SearchBox({ value, onChange }: { value: string; onChange: (q: string) => void }) {
+  const [draft, setDraft] = useState(value)
+  const latest = useRef(value)
+  useEffect(() => {
+    if (value !== latest.current) setDraft(value)
+    latest.current = value
+  }, [value])
+  useEffect(() => {
+    if (draft === latest.current) return
+    const timer = setTimeout(() => {
+      latest.current = draft
+      onChange(draft)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [draft, onChange])
   return (
-    <li>
-      <Link to={`/books/${book.id}`} className="flex flex-col gap-2 rounded-lg outline-offset-4">
-        <BookCover
-          title={book.title}
-          coverUrl={book.coverUrl}
-          progress={book.readStatus === 'reading' ? book.lastRead?.fraction : undefined}
-        />
-        <div className="min-w-0">
-          <div className="line-clamp-2 font-medium text-sm leading-snug">{book.title}</div>
-          {book.authors.length > 0 && (
-            <div className="truncate text-muted-foreground text-xs">{book.authors.join(', ')}</div>
-          )}
-          {book.seriesName && (
-            <div className="truncate text-muted-foreground text-xs">
-              {book.seriesName}
-              {book.seriesIndex != null && ` #${book.seriesIndex}`}
-            </div>
-          )}
-          {book.readStatus === 'finished' && (
-            <div className="text-muted-foreground text-xs">Finished</div>
-          )}
-        </div>
-      </Link>
-    </li>
+    <InputGroup className="w-full sm:w-64">
+      <InputGroupAddon>
+        <SearchIcon />
+      </InputGroupAddon>
+      <InputGroupInput
+        type="search"
+        placeholder="Search title, author, series, tag…"
+        aria-label="Search the library"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+    </InputGroup>
   )
 }

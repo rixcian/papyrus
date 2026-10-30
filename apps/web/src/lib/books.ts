@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ApiSchemas, api, unwrap } from '@/api/client'
 import type { operations } from '@/api/schema'
 import { type ReadStatus, syncEngine } from '@/sync'
@@ -6,6 +6,13 @@ import { type ReadStatus, syncEngine } from '@/sync'
 export type BookSummary = Awaited<ReturnType<typeof listBooks>>['books'][number]
 export type BookDetail = Awaited<ReturnType<typeof getBook>>
 export type BookFile = BookDetail['files'][number]
+/** Search, filters and sort for the library; every field is optional (ticket 06). */
+export type LibraryQuery = Omit<
+  NonNullable<operations['listBooks']['parameters']['query']>,
+  'cursor' | 'limit'
+>
+export type BookSort = NonNullable<LibraryQuery['sort']>
+export type Facet = Awaited<ReturnType<typeof getFacets>>['authors'][number]
 export type BookPatch = NonNullable<
   operations['updateBook']['requestBody']
 >['content']['application/json']
@@ -20,12 +27,20 @@ export type IngestResult = {
 export const bookKeys = {
   all: ['books'] as const,
   list: ['books', 'list'] as const,
-  filtered: (status: ReadStatus | undefined) => ['books', 'list', status ?? 'all'] as const,
+  filtered: (query: LibraryQuery) => ['books', 'list', query] as const,
+  continueReading: ['books', 'list', 'continue'] as const,
+  facets: ['books', 'facets'] as const,
   detail: (id: string) => ['books', 'detail', id] as const,
 }
 
-function listBooks(status?: ReadStatus) {
-  return unwrap(api.GET('/api/books', { params: { query: status ? { status } : {} } }))
+const PAGE_SIZE = 60
+
+function listBooks(query: LibraryQuery & { cursor?: string; limit?: number }) {
+  return unwrap(api.GET('/api/books', { params: { query } }))
+}
+
+function getFacets() {
+  return unwrap(api.GET('/api/books/facets'))
 }
 
 function getBook(bookId: string) {
@@ -36,8 +51,29 @@ function updateBook(bookId: string, body: BookPatch) {
   return unwrap(api.PATCH('/api/books/{bookId}', { params: { path: { bookId } }, body }))
 }
 
-export function useBooks(status?: ReadStatus) {
-  return useQuery({ queryKey: bookKeys.filtered(status), queryFn: () => listBooks(status) })
+/** The library, a page at a time, for the virtualised grid and list (ticket 06). */
+export function useBookList(query: LibraryQuery) {
+  return useInfiniteQuery({
+    queryKey: bookKeys.filtered(query),
+    queryFn: ({ pageParam }) =>
+      listBooks({ ...query, limit: PAGE_SIZE, ...(pageParam && { cursor: pageParam }) }),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    placeholderData: (previous) => previous,
+  })
+}
+
+/** Books being read, the most recently read first. */
+export function useContinueReading() {
+  return useQuery({
+    queryKey: bookKeys.continueReading,
+    queryFn: () => listBooks({ status: 'reading', sort: 'recent', limit: 12 }),
+    select: (data) => data.books.filter((b) => b.lastRead),
+  })
+}
+
+export function useFacets() {
+  return useQuery({ queryKey: bookKeys.facets, queryFn: getFacets })
 }
 
 /**

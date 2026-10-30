@@ -21,8 +21,35 @@ test('create a Profile, upload a book, read it, and resume on another device', a
     buffer: await buildReadableEpub(),
   })
   await expect(page.getByText('New Book')).toBeVisible()
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'sietch.epub',
+    mimeType: 'application/epub+zip',
+    buffer: await buildReadableEpub({
+      title: 'Sietch Tales',
+      author: 'Other Writer',
+      tags: ['Desert'],
+    }),
+  })
+  await expect(page.getByRole('link', { name: /Sietch Tales/ })).toBeVisible()
   await page.screenshot({ path: 'test-results/library.png' })
-  await page.getByRole('link', { name: /Arrakis Notes/ }).click()
+
+  // Search, a facet filter and the list layout (ticket 06).
+  const arrakis = page.getByRole('link', { name: /Arrakis Notes/ })
+  const sietch = page.getByRole('link', { name: /Sietch Tales/ })
+  await page.getByLabel('Search the library').fill('sietc')
+  await expect(arrakis).toHaveCount(0)
+  await expect(sietch).toBeVisible()
+  await expect(page).toHaveURL(/q=sietc/)
+  await page.getByLabel('Search the library').fill('')
+  await expect(arrakis).toBeVisible()
+  await page.getByRole('button', { name: /^Desert/ }).click()
+  await expect(arrakis).toHaveCount(0)
+  await page.getByRole('button', { name: 'List' }).click()
+  await page.screenshot({ path: 'test-results/library-list.png' })
+  await page.getByRole('button', { name: 'Clear tag filter' }).click()
+  await expect(arrakis).toBeVisible()
+  await page.getByRole('button', { name: 'Grid' }).click()
+  await arrakis.click()
   await expect(page.getByRole('heading', { name: 'Arrakis Notes' })).toBeVisible()
   await page.screenshot({ path: 'test-results/book.png' })
 

@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { FastifyPluginAsyncZod } from '@fastify/type-provider-zod'
-import { desc, eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import type { Db } from '../db/client.ts'
 import { type BookRow, bookAuthors, books, bookTags, profiles } from '../db/schema.ts'
@@ -12,6 +12,7 @@ import { FILE_FORMATS, type FileFormat, READABLE_FORMATS } from './formats.ts'
 import type { Ingest } from './ingest.ts'
 import type { Library } from './library.ts'
 import { matchKey, normaliseIsbn, sortTitle } from './metadata.ts'
+import { BOOK_SORTS, BookSearch } from './search.ts'
 
 const ErrorBody = z.object({ error: z.string(), message: z.string() })
 const Format = z.enum(FILE_FORMATS)
@@ -32,6 +33,8 @@ const BookSummary = z.object({
   /** The File read most recently and how far into it, for resuming and "Continue reading". */
   lastRead: z.object({ fileId: z.string(), fraction: z.number(), at: z.number() }).nullable(),
 })
+
+const Facet = z.object({ name: z.string(), count: z.number() })
 
 const BookFile = z.object({
   id: z.string(),
@@ -111,6 +114,7 @@ export function bookRoutes({
   sync,
   maxUploadBytes,
 }: BookRouteDeps): FastifyPluginAsyncZod {
+  const search = new BookSearch(db)
   const coverUrl = (b: BookRow) => (b.coverExt ? `/api/books/${b.id}/cover?v=${b.updatedAt}` : null)
 
   function readingState(profileId: string, bookIds: string[]) {
@@ -193,40 +197,78 @@ export function bookRoutes({
       {
         schema: {
           operationId: 'listBooks',
-          querystring: z.object({ status: z.enum(READ_STATUSES).optional() }),
-          response: { 200: z.object({ books: z.array(BookSummary) }) },
+          querystring: z.object({
+            q: z.string().max(200).optional(),
+            status: z.enum(READ_STATUSES).optional(),
+            author: z.string().optional(),
+            series: z.string().optional(),
+            tag: z.string().optional(),
+            sort: z.enum(BOOK_SORTS).optional(),
+            /** Opaque; pass back `nextCursor` for the next page. */
+            cursor: z.string().regex(/^\d+$/).optional(),
+            limit: z.coerce.number().int().min(1).max(200).default(60),
+          }),
+          response: {
+            200: z.object({
+              books: z.array(BookSummary),
+              total: z.number(),
+              nextCursor: z.string().nullable(),
+            }),
+          },
         },
       },
       async (request) => {
-        const rows = db
-          .select()
-          .from(books)
-          .where(eq(books.ownerProfileId, request.profile.id))
-          .orderBy(desc(books.addedAt))
-          .all()
-        const ids = rows.map((b) => b.id)
+        const { cursor, limit, ...filters } = request.query
+        const offset = cursor ? Number(cursor) : 0
+        const { ids, total } = search.list(request.profile.id, { ...filters, limit, offset })
+        const byId = new Map(
+          (ids.length ? db.select().from(books).where(inArray(books.id, ids)).all() : []).map(
+            (b) => [b.id, b],
+          ),
+        )
+        const rows = ids.flatMap((id) => byId.get(id) ?? [])
         const authors = library.authorsOf(ids)
         const fileRows = library.filesOf(ids)
         const stateOf = readingState(request.profile.id, ids)
-        const summaries = rows.map((b) => ({
-          id: b.id,
-          title: b.title,
-          authors: authors.get(b.id) ?? [],
-          seriesName: b.seriesName,
-          seriesIndex: b.seriesIndex,
-          coverUrl: coverUrl(b),
-          formats: [
-            ...new Set(
-              fileRows.filter((f) => f.bookId === b.id).map((f) => f.format as FileFormat),
-            ),
-          ],
-          owned: b.ownerProfileId === request.profile.id,
-          addedAt: b.addedAt,
-          ...stateOf(b.id),
-        }))
-        const { status } = request.query
-        return { books: status ? summaries.filter((b) => b.readStatus === status) : summaries }
+        const next = offset + ids.length
+        return {
+          books: rows.map((b) => ({
+            id: b.id,
+            title: b.title,
+            authors: authors.get(b.id) ?? [],
+            seriesName: b.seriesName,
+            seriesIndex: b.seriesIndex,
+            coverUrl: coverUrl(b),
+            formats: [
+              ...new Set(
+                fileRows.filter((f) => f.bookId === b.id).map((f) => f.format as FileFormat),
+              ),
+            ],
+            owned: b.ownerProfileId === request.profile.id,
+            addedAt: b.addedAt,
+            ...stateOf(b.id),
+          })),
+          total,
+          nextCursor: next < total ? String(next) : null,
+        }
       },
+    )
+
+    app.get(
+      '/api/books/facets',
+      {
+        schema: {
+          operationId: 'getBookFacets',
+          response: {
+            200: z.object({
+              authors: z.array(Facet),
+              series: z.array(Facet),
+              tags: z.array(Facet),
+            }),
+          },
+        },
+      },
+      async (request) => search.facets(request.profile.id),
     )
 
     app.get(

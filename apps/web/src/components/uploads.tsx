@@ -62,7 +62,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         .then((result) => {
           patch(item.id, { state: 'done', progress: 1, result })
           if (result.status !== 'failed')
-            void queryClient.invalidateQueries({ queryKey: bookKeys.list })
+            void queryClient.invalidateQueries({ queryKey: bookKeys.all })
         })
     }
   }, [items, patch, queryClient])

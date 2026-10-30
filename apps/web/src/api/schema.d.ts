@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/books/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getBookFacets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/books/{bookId}": {
         parameters: {
             query?: never;
@@ -204,6 +220,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getFileState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/books/{bookId}/highlights.md": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["exportHighlights"];
         put?: never;
         post?: never;
         delete?: never;
@@ -525,7 +557,14 @@ export interface operations {
     listBooks: {
         parameters: {
             query?: {
+                q?: string;
                 status?: "unread" | "reading" | "finished";
+                author?: string;
+                series?: string;
+                tag?: string;
+                sort?: "added" | "title" | "author" | "series" | "recent" | "relevance";
+                cursor?: string;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -557,6 +596,41 @@ export interface operations {
                                 fraction: number;
                                 at: number;
                             } | null;
+                        }[];
+                        total: number;
+                        nextCursor: string | null;
+                    };
+                };
+            };
+        };
+    };
+    getBookFacets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        authors: {
+                            name: string;
+                            count: number;
+                        }[];
+                        series: {
+                            name: string;
+                            count: number;
+                        }[];
+                        tags: {
+                            name: string;
+                            count: number;
                         }[];
                     };
                 };
@@ -943,6 +1017,27 @@ export interface operations {
                     cursor: number;
                     changes: ({
                         /** @enum {string} */
+                        kind: "bookmark";
+                        id: string;
+                        fileId: string;
+                        cfi: string;
+                        snippet: string;
+                        deleted: boolean;
+                        hlc: string;
+                    } | {
+                        /** @enum {string} */
+                        kind: "highlight";
+                        id: string;
+                        fileId: string;
+                        cfiRange: string;
+                        /** @enum {string} */
+                        colour: "yellow" | "green" | "blue" | "pink";
+                        text: string;
+                        note: string | null;
+                        deleted: boolean;
+                        hlc: string;
+                    } | {
+                        /** @enum {string} */
                         kind: "progress";
                         fileId: string;
                         cfi: string;
@@ -970,6 +1065,28 @@ export interface operations {
                         applied: number;
                         cursor: number;
                         records: ({
+                            /** @enum {string} */
+                            kind: "bookmark";
+                            bookId: string;
+                            id: string;
+                            fileId: string;
+                            cfi: string;
+                            snippet: string;
+                            deleted: boolean;
+                            hlc: string;
+                        } | {
+                            /** @enum {string} */
+                            kind: "highlight";
+                            bookId: string;
+                            id: string;
+                            fileId: string;
+                            cfiRange: string;
+                            colour: string;
+                            text: string;
+                            note: string | null;
+                            deleted: boolean;
+                            hlc: string;
+                        } | {
                             /** @enum {string} */
                             kind: "progress";
                             fileId: string;
@@ -1043,6 +1160,26 @@ export interface operations {
                         message: string;
                     };
                 };
+            };
+        };
+    };
+    exportHighlights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
