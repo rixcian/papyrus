@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react'
 import type { Highlight } from '@/sync/annotations'
 import type {
   DrawAnnotationDetail,
@@ -73,10 +73,22 @@ function toScreen(doc: Document, rect: DOMRect): DOMRect {
  * Owns one `<foliate-view>` (ticket 01). Props are read through refs so the element is
  * created once per File, not on every render.
  */
+/** Views already closed: closing twice would destroy the renderer twice and throw. */
+const closed = new WeakSet<View>()
+
+function closeView(view: View | null) {
+  if (!view || closed.has(view)) return
+  closed.add(view)
+  view.close()
+  view.remove()
+}
+
 export const FoliateReader = forwardRef<FoliateReaderHandle, Props>(
   function FoliateReader(props, ref) {
     const container = useRef<HTMLDivElement>(null)
     const viewRef = useRef<View | null>(null)
+    // The view as soon as it exists, for the teardown; viewRef is set only once it's open.
+    const created = useRef<View | null>(null)
     const docs = useRef(new Set<Document>())
     /** Highlights currently drawn: CFI range → colour. */
     const drawn = useRef(new Map<string, string>())
@@ -162,6 +174,7 @@ export const FoliateReader = forwardRef<FoliateReaderHandle, Props>(
         const { Overlayer } = await import('@/vendor/foliate-js/overlayer.js')
         if (cancelled || !container.current) return
         view = document.createElement('foliate-view') as View
+        created.current = view
         view.style.display = 'block'
         view.style.height = '100%'
         view.addEventListener('relocate', (e) =>
@@ -204,10 +217,20 @@ export const FoliateReader = forwardRef<FoliateReaderHandle, Props>(
         window.removeEventListener('keydown', onKey)
         docs.current.clear()
         viewRef.current = null
-        view?.close()
-        view?.remove()
+        closeView(view)
       }
     }, [])
+
+    // Close the renderer before React takes its iframe out of the page: a layout that runs
+    // after that finds no document and throws. Layout cleanups run before the DOM is removed,
+    // passive ones (above) only after.
+    useLayoutEffect(
+      () => () => {
+        closeView(created.current)
+        created.current = null
+      },
+      [],
+    )
 
     useEffect(() => {
       if (viewRef.current) applyPrefs(viewRef.current, props.prefs)
