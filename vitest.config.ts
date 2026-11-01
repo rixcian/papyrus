@@ -13,8 +13,15 @@ export default defineConfig({
         'apps/server/src/test/**',
         'apps/server/src/scripts/**',
         'apps/web/src/vendor/**',
+        'apps/web/src/test/**',
+        // The coss UI kit, copied in by its CLI: its own project tests it.
+        'apps/web/src/components/ui/**',
+        'apps/web/src/hooks/**',
+        'apps/web/src/lib/composer-*.ts',
       ],
       reporter: ['text-summary', 'json-summary', 'html'],
+      // Fails `pnpm test:coverage` if line coverage drops below this.
+      thresholds: { lines: 90 },
     },
   },
 })
