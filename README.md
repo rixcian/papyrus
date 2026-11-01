@@ -1,4 +1,16 @@
+<p align="center">
+  <img src="apps/web/public/icon.svg" width="112" alt="Papyrus logo">
+</p>
+
 <h1 align="center">Papyrus</h1>
+
+<p align="center">
+  <a href="https://github.com/rixcian/papyrus/actions/workflows/ci.yml"><img src="https://github.com/rixcian/papyrus/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
+  <a href="https://github.com/rixcian/papyrus/actions/workflows/ci.yml"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Frixcian%2Fpapyrus%2Fbadges%2Fcoverage.json" alt="Unit test coverage"></a>
+  <a href="https://github.com/rixcian/papyrus/pkgs/container/papyrus"><img src="https://img.shields.io/github/package-json/v/rixcian/papyrus?label=ghcr.io&logo=docker&logoColor=white" alt="Image version on GHCR"></a>
+  <img src="https://img.shields.io/badge/platform-linux%2Famd64-blue" alt="linux/amd64">
+  <img src="https://img.shields.io/badge/node-%E2%89%A524-5fa04e?logo=node.js&logoColor=white" alt="Node 24 or newer">
+</p>
 
 <p align="center">
   A self-hosted library, reader and audiobook player for your household.<br>
@@ -178,14 +190,15 @@ pnpm install
 pnpm dev          # API on :8080 and the web app on :5173 (open this one)
 ```
 
-| Command          |                                                                            |
-| ---------------- | -------------------------------------------------------------------------- |
-| `pnpm check`     | Biome lint and format check (`pnpm format` fixes)                          |
-| `pnpm typecheck` | TypeScript in every package                                                |
-| `pnpm test`      | Vitest unit and API tests                                                  |
-| `pnpm build`     | Build the web app and the server bundle                                    |
-| `pnpm e2e`       | Playwright end-to-end tests against the built app (run `pnpm build` first) |
-| `pnpm gen:api`   | Regenerate the web app's API types after changing a server route           |
+| Command              |                                                                            |
+| -------------------- | -------------------------------------------------------------------------- |
+| `pnpm check`         | Biome lint and format check (`pnpm format` fixes)                          |
+| `pnpm typecheck`     | TypeScript in every package                                                |
+| `pnpm test`          | Vitest unit and API tests                                                  |
+| `pnpm test:coverage` | The same, with a coverage report in `coverage/`                            |
+| `pnpm build`         | Build the web app and the server bundle                                    |
+| `pnpm e2e`           | Playwright end-to-end tests against the built app (run `pnpm build` first) |
+| `pnpm gen:api`       | Regenerate the web app's API types after changing a server route           |
 
 The service worker only runs in a production build; `pnpm dev` doesn't register it.
 

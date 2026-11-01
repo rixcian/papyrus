@@ -5,7 +5,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: ["**", "!badges"]
   pull_request:
 
 concurrency:
@@ -19,6 +19,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write # the coverage badge, pushed to the badges branch
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4 # version from packageManager in package.json
@@ -31,8 +33,25 @@ jobs:
         run: pnpm check
       - name: Typecheck
         run: pnpm typecheck
-      - name: Unit tests
-        run: pnpm test
+      - name: Unit tests with coverage
+        run: pnpm test:coverage
+      - name: Publish the coverage badge
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          pct=$(node -p "Math.floor(require('./coverage/coverage-summary.json').total.lines.pct)")
+          if   [ "$pct" -ge 80 ]; then color=brightgreen
+          elif [ "$pct" -ge 60 ]; then color=yellow
+          elif [ "$pct" -ge 40 ]; then color=orange
+          else color=red; fi
+          dir=$(mktemp -d)
+          cd "$dir"
+          git init -q -b badges
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"$pct%\",\"color\":\"$color\"}" > coverage.json
+          git add coverage.json
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
+            commit -q -m "Coverage $pct% for ${GITHUB_SHA::7} [skip ci]"
+          git push -q -f origin badges
       - name: Build
         run: pnpm build
       - name: Install Playwright's Chromium
