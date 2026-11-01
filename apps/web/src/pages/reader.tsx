@@ -1,6 +1,13 @@
 import { compareHlc, type HighlightColour } from '@papyrus/shared'
 import { useQuery } from '@tanstack/react-query'
-import { SearchIcon } from 'lucide-react'
+import {
+  ArrowLeftIcon,
+  BookmarkIcon,
+  ListIcon,
+  NotebookPenIcon,
+  SearchIcon,
+  TypeIcon,
+} from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
@@ -288,15 +295,17 @@ function Reader({
 
   const activeHighlight = tapped?.highlights.length === 1 ? tapped.highlights[0] : undefined
   const fraction = scrub ?? location?.fraction ?? initial?.fraction ?? 0
-  const bar = 'absolute inset-x-0 z-10 flex items-center gap-2 px-3 transition-opacity duration-200'
+  const bar =
+    'absolute inset-x-0 z-10 flex items-center gap-1 px-2 backdrop-blur-xl transition-[opacity,translate] duration-300 ease-out-soft'
   const ghost = { color: theme.fg }
+  const glass = { background: `color-mix(in srgb, ${theme.bg} 82%, transparent)` }
 
   return (
     <div
       className="fixed inset-0 select-none"
       style={{ background: theme.bg, color: theme.fg, colorScheme: theme.dark ? 'dark' : 'light' }}
     >
-      <div className="absolute inset-x-0 top-12 bottom-14">
+      <div className="absolute inset-x-0 top-[calc(3rem+env(safe-area-inset-top))] bottom-[calc(3.5rem+env(safe-area-inset-bottom))]">
         <FoliateReader
           ref={reader}
           file={file}
@@ -453,12 +462,26 @@ function Reader({
         </div>
       )}
 
+      {/* With the bars away, a hairline at the top still says how far in you are. */}
+      <div
+        aria-hidden
+        className={`absolute start-0 top-[env(safe-area-inset-top)] z-10 h-0.5 transition-[width,opacity] duration-500 ease-out-soft ${chrome ? 'opacity-0' : 'opacity-40'}`}
+        style={{ width: `${fraction * 100}%`, background: theme.fg }}
+      />
+
       <header
-        className={`${bar} top-0 h-12 pt-[env(safe-area-inset-top)] ${chrome ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-        style={{ background: theme.bg }}
+        className={`${bar} top-0 h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] ${chrome ? '' : 'pointer-events-none -translate-y-full opacity-0'}`}
+        style={glass}
       >
-        <Button variant="ghost" size="sm" render={<Link to={`/books/${bookId}`} />} style={ghost}>
-          ← Back
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          aria-label="Back"
+          render={<Link to={`/books/${bookId}`} />}
+          style={ghost}
+        >
+          <ArrowLeftIcon />
         </Button>
         <div className="min-w-0 flex-1 truncate text-center text-sm">
           <span className="font-medium">{title}</span>
@@ -468,53 +491,58 @@ function Reader({
         </div>
         <Button
           variant="ghost"
-          size="sm"
-          onClick={toggleBookmark}
-          disabled={!location?.cfi}
-          aria-pressed={Boolean(bookmarkHere)}
-          aria-label={bookmarkHere ? 'Remove bookmark' : 'Bookmark this page'}
-          style={ghost}
-        >
-          {bookmarkHere ? '★' : '☆'}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
+          size="icon"
+          className="rounded-full"
           onClick={() => setPanel('search')}
           aria-label="Search in book"
           style={ghost}
         >
           <SearchIcon />
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => setPanel('notes')} style={ghost}>
-          Notes
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          onClick={() => setPanel('notes')}
+          aria-label="Notes"
+          style={ghost}
+        >
+          <NotebookPenIcon />
         </Button>
         <Button
           variant="ghost"
-          size="sm"
-          onClick={() => setPanel('toc')}
-          disabled={!toc.length}
+          size="icon"
+          className="rounded-full"
+          onClick={toggleBookmark}
+          disabled={!location?.cfi}
+          aria-pressed={Boolean(bookmarkHere)}
+          aria-label={bookmarkHere ? 'Remove bookmark' : 'Bookmark this page'}
           style={ghost}
         >
-          Contents
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setPanel('aa')}
-          aria-label="Text and layout"
-          style={ghost}
-        >
-          Aa
+          <BookmarkIcon
+            key={bookmarkHere ? 'on' : 'off'}
+            className={bookmarkHere ? 'animate-pop fill-current' : undefined}
+          />
         </Button>
       </header>
 
       <footer
-        className={`${bar} bottom-0 h-14 pb-[env(safe-area-inset-bottom)] ${chrome ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-        style={{ background: theme.bg }}
+        className={`${bar} bottom-0 h-[calc(3.5rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] ${chrome ? '' : 'pointer-events-none translate-y-full opacity-0'}`}
+        style={glass}
       >
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          onClick={() => setPanel('toc')}
+          disabled={!toc.length}
+          aria-label="Contents"
+          style={ghost}
+        >
+          <ListIcon />
+        </Button>
         <Slider
-          className="flex-1"
+          className="flex-1 px-1"
           min={0}
           max={1000}
           value={Math.round(fraction * 1000)}
@@ -528,9 +556,19 @@ function Reader({
             reader.current?.goToFraction(f)
           }}
         />
-        <span className="w-12 text-end text-xs tabular-nums opacity-70">
+        <span className="w-10 text-end text-xs tabular-nums opacity-70">
           {Math.round(fraction * 100)}%
         </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          onClick={() => setPanel('aa')}
+          aria-label="Text and layout"
+          style={ghost}
+        >
+          <TypeIcon />
+        </Button>
       </footer>
 
       <Sheet open={panel === 'toc'} onOpenChange={(open) => setPanel(open ? 'toc' : null)}>

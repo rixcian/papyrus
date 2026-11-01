@@ -334,15 +334,17 @@ async function main() {
     await page.waitForTimeout(700)
     await page.screenshot({ path: path.join(OUT, 'highlights.png') })
 
-    // Dark mode follows the system.
-    const dark = await browser.newContext({ ...PHONE, baseURL: BASE, colorScheme: 'dark' })
-    await dark.addCookies(await ctx.cookies())
-    const night = await dark.newPage()
-    await night.goto('/')
-    await night.getByRole('heading', { name: 'Continue reading' }).waitFor()
-    await night.waitForLoadState('networkidle')
-    await night.waitForTimeout(800)
-    await night.screenshot({ path: path.join(OUT, 'library-dark.png') })
+    // Below the Continue reading hero: the library grid, with the floating nav.
+    const grid = await ctx.newPage()
+    await grid.goto('/')
+    await grid.getByRole('heading', { name: 'Library', exact: true }).scrollIntoViewIfNeeded()
+    await grid.evaluate(() => {
+      const heading = [...document.querySelectorAll('h1')].find((h) => h.textContent === 'Library')
+      window.scrollTo({ top: (heading?.getBoundingClientRect().top ?? 0) + window.scrollY - 24 })
+    })
+    await grid.waitForLoadState('networkidle')
+    await grid.waitForTimeout(800)
+    await grid.screenshot({ path: path.join(OUT, 'library-grid.png') })
     console.log(`Screenshots written to ${path.relative(ROOT, OUT)}`)
   } finally {
     await browser?.close()

@@ -17,6 +17,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
+import { AmbientBlobs } from '@/components/ambient'
 import { BookCover } from '@/components/book-cover'
 import { Button } from '@/components/ui/button'
 import {
@@ -41,10 +42,12 @@ import { usePlayer, usePlayerState } from '@/player/provider'
 import {
   audioLocation,
   chapterAt,
+  chapterSpan,
   formatClock,
   parseAudioLocation,
   resumeTime,
 } from '@/player/timeline'
+import { waveformBars } from '@/player/waveform'
 import { useAnnotations } from '@/reader/use-annotations'
 import { offlineStore, syncEngine } from '@/sync'
 import { readLocalProgress } from '@/sync/local-progress'
@@ -181,7 +184,11 @@ function FullPlayer({ item }: { item: PlayerItem }) {
   const shown = scrub ?? time
   const chapterIndex = chapterAt(item.chapters, shown)
   const chapter = item.chapters[chapterIndex]
-  const left = (item.duration - shown) / speed
+  // The timeline is the Chapter playing. It follows the player, not a drag, so it holds still
+  // while scrubbing to the very end of the Chapter.
+  const span = chapterSpan(item.chapters, item.duration, time)
+  const inChapter = Math.min(span.end, Math.max(span.start, shown))
+  const left = (span.end - inChapter) / speed
 
   // Space toggles, arrows skip, as in most players.
   useEffect(() => {
@@ -198,12 +205,17 @@ function FullPlayer({ item }: { item: PlayerItem }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [player])
 
+  const extra =
+    'flex min-w-16 flex-col items-center gap-1 rounded-xl px-3 py-1.5 font-medium text-muted-foreground text-xs transition-colors hover:bg-white/5 hover:text-foreground [&_svg]:size-5'
+
   return (
-    <div className="flex min-h-dvh flex-col bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      <header className="flex h-12 items-center gap-2 px-3">
+    <div className="relative isolate flex min-h-dvh flex-col overflow-hidden bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <AmbientBlobs coverUrl={item.coverUrl} playing={playing} />
+      <header className="flex h-12 items-center gap-1 px-2">
         <Button
           variant="ghost"
           size="icon"
+          className="rounded-full"
           aria-label="Back"
           onClick={() => (history.length > 1 ? navigate(-1) : navigate(`/books/${item.bookId}`))}
         >
@@ -215,184 +227,219 @@ function FullPlayer({ item }: { item: PlayerItem }) {
         >
           {item.title}
         </Link>
-        <Button variant="ghost" size="icon" aria-label="Add bookmark" onClick={addBookmark}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          aria-label="Add bookmark"
+          onClick={addBookmark}
+        >
           <BookmarkPlusIcon />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Bookmarks"
-          onClick={() => setPanel('bookmarks')}
-        >
-          <BookmarkIcon />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Chapters"
-          disabled={!item.chapters.length}
-          onClick={() => setPanel('chapters')}
-        >
-          <ListIcon />
         </Button>
       </header>
 
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-5 px-6 pb-6">
-        <BookCover
-          title={item.title}
-          coverUrl={item.coverUrl}
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 pb-8 md:grid md:max-w-5xl md:grid-cols-2 md:items-center md:gap-16 md:px-10">
+        <div
           className={cn(
-            'mx-auto aspect-square w-[min(17rem,65vw,38dvh)] shadow-xl',
-            // A cover keeps its own shape: square for audiobooks, tall for a Book's ebook.
-            item.coverUrl &&
-              'overflow-visible bg-transparent shadow-none [&_img]:mx-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-lg [&_img]:object-contain [&_img]:shadow-xl',
-          )}
-        />
-        <div className="text-center">
-          <h1 className="font-semibold text-xl tracking-tight">{item.title}</h1>
-          {item.authors.length > 0 && (
-            <p className="text-muted-foreground">{item.authors.join(', ')}</p>
-          )}
-          <p className="mt-1 min-h-5 truncate text-sm" aria-live="polite">
-            {chapter?.title}
-          </p>
-        </div>
-
-        <div>
-          <Slider
-            min={0}
-            max={Math.max(1, Math.round(item.duration))}
-            value={Math.round(shown)}
-            getAriaLabel={() => 'Position'}
-            onValueChange={(v) => setScrub(Array.isArray(v) ? (v[0] as number) : (v as number))}
-            onValueCommitted={(v) => {
-              setScrub(null)
-              player.seek(Array.isArray(v) ? (v[0] as number) : (v as number))
-            }}
-          />
-          <div className="mt-1.5 flex justify-between text-muted-foreground text-xs tabular-nums">
-            <span data-testid="elapsed">{formatClock(shown)}</span>
-            <span>-{formatClock(left)}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            aria-label="Previous chapter"
-            onClick={() => player.previousChapter()}
-          >
-            <SkipBackIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            aria-label={`Back ${SKIP_BACK} seconds`}
-            onClick={() => player.skip(-SKIP_BACK)}
-          >
-            <RotateCcwIcon />
-          </Button>
-          <Button
-            size="icon-xl"
-            className="size-16 rounded-full sm:size-16"
-            aria-label={playing ? 'Pause' : 'Play'}
-            onClick={() => player.toggle()}
-          >
-            {playing ? <PauseIcon className="size-7" /> : <PlayIcon className="size-7" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            aria-label={`Forward ${SKIP_FORWARD} seconds`}
-            onClick={() => player.skip(SKIP_FORWARD)}
-          >
-            <RotateCwIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            aria-label="Next chapter"
-            disabled={chapterIndex >= item.chapters.length - 1}
-            onClick={() => player.nextChapter()}
-          >
-            <SkipForwardIcon />
-          </Button>
-        </div>
-
-        <p
-          className={cn(
-            'min-h-5 text-center text-sm',
-            error ? 'text-destructive' : 'text-muted-foreground',
+            'animate-cover-in transition-transform duration-700 ease-spring',
+            playing ? 'scale-100' : 'scale-[0.92]',
           )}
         >
-          {error ?? notice ?? (waiting && playing ? 'Loading…' : '')}
-        </p>
+          <BookCover
+            title={item.title}
+            coverUrl={item.coverUrl}
+            className={cn(
+              'mx-auto aspect-square w-[min(18rem,70vw,38dvh)] rounded-2xl shadow-2xl shadow-black/60 md:w-full md:max-w-md',
+              // A cover keeps its own shape: square for audiobooks, tall for a Book's ebook.
+              item.coverUrl &&
+                'overflow-visible bg-transparent shadow-none [&_img]:mx-auto [&_img]:h-full [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-2xl [&_img]:object-contain [&_img]:shadow-2xl [&_img]:shadow-black/60',
+            )}
+          />
+        </div>
 
-        <div className="flex items-center justify-center gap-2">
-          <Menu>
-            <MenuTrigger render={<Button variant="outline" size="sm" aria-label="Speed" />}>
-              {+speed.toFixed(2)}×
-            </MenuTrigger>
-            <MenuPopup align="center">
-              <MenuGroup>
-                <MenuGroupLabel>Speed</MenuGroupLabel>
-                <MenuRadioGroup value={speed} onValueChange={(v) => player.setSpeed(Number(v))}>
-                  {SPEEDS.map((s) => (
-                    <MenuRadioItem key={s} value={s} closeOnClick>
-                      {s}×
-                    </MenuRadioItem>
-                  ))}
-                </MenuRadioGroup>
-              </MenuGroup>
-              <MenuSeparator />
-              <MenuItem onClick={() => player.setSpeed(Math.max(0.75, +(speed - 0.05).toFixed(2)))}>
-                Slower (−0.05)
-              </MenuItem>
-              <MenuItem onClick={() => player.setSpeed(Math.min(3, +(speed + 0.05).toFixed(2)))}>
-                Faster (+0.05)
-              </MenuItem>
-            </MenuPopup>
-          </Menu>
-          <Menu>
-            <MenuTrigger
-              render={
-                <Button
-                  variant={sleep ? 'secondary' : 'outline'}
-                  size="sm"
-                  aria-label="Sleep timer"
-                />
-              }
+        <div className="flex animate-rise flex-col gap-6 [animation-delay:80ms]">
+          <div className="text-center md:text-start">
+            <h1 className="text-balance font-semibold text-2xl tracking-tight">{item.title}</h1>
+            {item.authors.length > 0 && (
+              <p className="text-muted-foreground">{item.authors.join(', ')}</p>
+            )}
+            <p
+              className="mt-2 flex min-h-5 items-center justify-center gap-2 truncate font-medium text-sm md:justify-start"
+              aria-live="polite"
             >
-              <MoonIcon />
-              {sleep && <SleepLeft sleep={sleep} />}
-            </MenuTrigger>
-            <MenuPopup align="center">
-              <MenuGroup>
-                <MenuGroupLabel>Sleep timer</MenuGroupLabel>
-                {SLEEP_MINUTES.map((m) => (
-                  <MenuItem
-                    key={m}
-                    onClick={() => player.setSleep({ kind: 'minutes', minutes: m })}
-                  >
-                    {m < 60 ? `${m} minutes` : `${m / 60} ${m === 60 ? 'hour' : 'hours'}`}
-                  </MenuItem>
-                ))}
-                <MenuItem
-                  disabled={!item.chapters.length}
-                  onClick={() => player.setSleep({ kind: 'chapter' })}
-                >
-                  End of chapter
-                </MenuItem>
-              </MenuGroup>
-              {sleep && (
-                <>
-                  <MenuSeparator />
-                  <MenuItem onClick={() => player.setSleep(null)}>Turn off</MenuItem>
-                </>
+              {chapter && <Equalizer playing={playing} />}
+              {chapter?.title}
+            </p>
+          </div>
+
+          <div>
+            <Waveform
+              seed={`${item.fileId}:${span.start}`}
+              start={span.start}
+              end={span.end}
+              value={inChapter}
+              onScrub={setScrub}
+              onCommit={(v) => {
+                setScrub(null)
+                player.seek(v)
+              }}
+            />
+            <div className="mt-1.5 flex justify-between text-muted-foreground text-xs tabular-nums">
+              <span data-testid="elapsed">{formatClock(inChapter - span.start)}</span>
+              <span>-{formatClock(left)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-1 sm:gap-2">
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="rounded-full"
+              aria-label="Previous chapter"
+              onClick={() => player.previousChapter()}
+            >
+              <SkipBackIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="rounded-full"
+              aria-label={`Back ${SKIP_BACK} seconds`}
+              onClick={() => player.skip(-SKIP_BACK)}
+            >
+              <RotateCcwIcon />
+            </Button>
+            <Button
+              size="icon-xl"
+              className="mx-1 size-18 rounded-full shadow-black/40 shadow-lg transition-transform active:scale-90 sm:size-18"
+              aria-label={playing ? 'Pause' : 'Play'}
+              onClick={() => player.toggle()}
+            >
+              {playing ? (
+                <PauseIcon key="pause" className="size-7 animate-pop fill-current" />
+              ) : (
+                <PlayIcon key="play" className="size-7 animate-pop fill-current" />
               )}
-            </MenuPopup>
-          </Menu>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="rounded-full"
+              aria-label={`Forward ${SKIP_FORWARD} seconds`}
+              onClick={() => player.skip(SKIP_FORWARD)}
+            >
+              <RotateCwIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="rounded-full"
+              aria-label="Next chapter"
+              disabled={chapterIndex >= item.chapters.length - 1}
+              onClick={() => player.nextChapter()}
+            >
+              <SkipForwardIcon />
+            </Button>
+          </div>
+
+          <p
+            className={cn(
+              'min-h-5 text-center text-sm',
+              error ? 'text-destructive' : 'text-muted-foreground',
+            )}
+          >
+            {error ?? notice ?? (waiting && playing ? 'Loading…' : '')}
+          </p>
+
+          <div className="flex items-start justify-between gap-1">
+            <Menu>
+              <MenuTrigger render={<button type="button" className={extra} aria-label="Speed" />}>
+                <span className="grid h-5 place-items-center font-semibold text-foreground text-sm tabular-nums">
+                  {+speed.toFixed(2)}×
+                </span>
+                Speed
+              </MenuTrigger>
+              <MenuPopup align="center">
+                <MenuGroup>
+                  <MenuGroupLabel>Speed</MenuGroupLabel>
+                  <MenuRadioGroup value={speed} onValueChange={(v) => player.setSpeed(Number(v))}>
+                    {SPEEDS.map((s) => (
+                      <MenuRadioItem key={s} value={s} closeOnClick>
+                        {s}×
+                      </MenuRadioItem>
+                    ))}
+                  </MenuRadioGroup>
+                </MenuGroup>
+                <MenuSeparator />
+                <MenuItem
+                  onClick={() => player.setSpeed(Math.max(0.75, +(speed - 0.05).toFixed(2)))}
+                >
+                  Slower (−0.05)
+                </MenuItem>
+                <MenuItem onClick={() => player.setSpeed(Math.min(3, +(speed + 0.05).toFixed(2)))}>
+                  Faster (+0.05)
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
+            <Menu>
+              <MenuTrigger
+                render={
+                  <button
+                    type="button"
+                    className={cn(extra, sleep && 'text-foreground')}
+                    aria-label="Sleep timer"
+                  />
+                }
+              >
+                <MoonIcon className={sleep ? 'fill-current' : undefined} />
+                {sleep ? <SleepLeft sleep={sleep} /> : 'Sleep'}
+              </MenuTrigger>
+              <MenuPopup align="center">
+                <MenuGroup>
+                  <MenuGroupLabel>Sleep timer</MenuGroupLabel>
+                  {SLEEP_MINUTES.map((m) => (
+                    <MenuItem
+                      key={m}
+                      onClick={() => player.setSleep({ kind: 'minutes', minutes: m })}
+                    >
+                      {m < 60 ? `${m} minutes` : `${m / 60} ${m === 60 ? 'hour' : 'hours'}`}
+                    </MenuItem>
+                  ))}
+                  <MenuItem
+                    disabled={!item.chapters.length}
+                    onClick={() => player.setSleep({ kind: 'chapter' })}
+                  >
+                    End of chapter
+                  </MenuItem>
+                </MenuGroup>
+                {sleep && (
+                  <>
+                    <MenuSeparator />
+                    <MenuItem onClick={() => player.setSleep(null)}>Turn off</MenuItem>
+                  </>
+                )}
+              </MenuPopup>
+            </Menu>
+            <button
+              type="button"
+              className={cn(extra, 'disabled:pointer-events-none disabled:opacity-50')}
+              aria-label="Chapters"
+              disabled={!item.chapters.length}
+              onClick={() => setPanel('chapters')}
+            >
+              <ListIcon />
+              Chapters
+            </button>
+            <button
+              type="button"
+              className={extra}
+              aria-label="Bookmarks"
+              onClick={() => setPanel('bookmarks')}
+            >
+              <BookmarkIcon />
+              Bookmarks
+            </button>
+          </div>
         </div>
       </main>
 
@@ -483,6 +530,73 @@ function FullPlayer({ item }: { item: PlayerItem }) {
           </SheetPanel>
         </SheetPopup>
       </Sheet>
+    </div>
+  )
+}
+
+/** Three bars that bounce while the chapter plays. */
+function Equalizer({ playing }: { playing: boolean }) {
+  return (
+    <span aria-hidden className="flex h-3.5 w-4 shrink-0 items-end gap-0.5">
+      {[0, -0.3, -0.6].map((delay) => (
+        <span
+          key={delay}
+          className={cn('h-2/5 flex-1 rounded-[1px] bg-current', playing && 'animate-eq')}
+          style={{ animationDelay: `${delay}s` }}
+        />
+      ))}
+    </span>
+  )
+}
+
+const BARS = 56
+
+/** The position slider drawn as a waveform: played bars bright, the rest dim. */
+function Waveform({
+  seed,
+  start,
+  end,
+  value,
+  onScrub,
+  onCommit,
+}: {
+  seed: string
+  /** The Chapter's bounds, in seconds across the whole File. */
+  start: number
+  end: number
+  value: number
+  onScrub: (seconds: number) => void
+  onCommit: (seconds: number) => void
+}) {
+  const bars = useMemo(() => waveformBars(seed, BARS), [seed])
+  const played = end > start ? (value - start) / (end - start) : 0
+  const seconds = (v: number | readonly number[]) =>
+    Array.isArray(v) ? (v[0] as number) : (v as number)
+  return (
+    <div className="relative h-12 rounded-lg has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/60 has-[:focus-visible]:ring-offset-4 has-[:focus-visible]:ring-offset-background">
+      <div aria-hidden className="absolute inset-0 flex items-center gap-[3px]">
+        {bars.map((height, i) => (
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: bars are positional
+            key={i}
+            className={cn(
+              'flex-1 rounded-full transition-colors duration-300',
+              (i + 0.5) / BARS <= played ? 'bg-foreground' : 'bg-foreground/20',
+            )}
+            style={{ height: `${height}%` }}
+          />
+        ))}
+      </div>
+      <Slider
+        // The bars show the position; the slider's own track and thumb stay invisible.
+        className="absolute inset-0 cursor-pointer [&_[data-slot=slider-control]]:h-full [&_[data-slot=slider-control]]:items-center [&_[data-slot=slider-indicator]]:bg-transparent [&_[data-slot=slider-thumb]]:opacity-0 [&_[data-slot=slider-track]]:before:bg-transparent"
+        min={start}
+        max={Math.max(start + 1, end)}
+        value={value}
+        getAriaLabel={() => 'Position in chapter'}
+        onValueChange={(v) => onScrub(seconds(v))}
+        onValueCommitted={(v) => onCommit(seconds(v))}
+      />
     </div>
   )
 }

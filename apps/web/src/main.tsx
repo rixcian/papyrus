@@ -7,8 +7,8 @@ import { PwaProvider } from './lib/pwa'
 import { router } from './router'
 import './index.css'
 
-if (window.matchMedia('(prefers-color-scheme: dark)').matches)
-  document.documentElement.classList.add('dark')
+// Night: the app is dark throughout; the reader keeps its own page themes.
+document.documentElement.classList.add('dark')
 
 const queryClient = new QueryClient({
   defaultOptions: {

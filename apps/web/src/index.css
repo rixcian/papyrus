@@ -50,7 +50,8 @@
 }
 
 .dark {
-  --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
+  /* Night: a deeper ground so each Book's cover colour can glow over it. */
+  --background: color-mix(in srgb, var(--color-zinc-950) 97%, var(--color-white));
   --foreground: var(--color-neutral-100);
   --muted: --alpha(var(--color-white) / 4%);
   --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
@@ -246,5 +247,76 @@
   }
   html {
     @apply font-sans font-mono;
+  }
+}
+
+/* Night motion: short, eased, and off for anyone who asks for reduced motion. */
+@theme {
+  --ease-out-soft: cubic-bezier(0.22, 0.8, 0.24, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+  --animate-page-in: page-in 0.4s var(--ease-out-soft) both;
+  --animate-rise: rise 0.5s var(--ease-out-soft) both;
+  --animate-cover-in: cover-in 0.6s var(--ease-spring) both;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-drift: drift 16s ease-in-out infinite alternate;
+  --animate-eq: eq 0.9s ease-in-out infinite;
+  --animate-pop: pop 0.3s var(--ease-spring);
+  /* Opacity only: a transform here would trap each page's absolutely placed glow. */
+  @keyframes page-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+  @keyframes cover-in {
+    from {
+      opacity: 0;
+      transform: scale(0.88) translateY(10px);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: perspective(800px) rotateY(-12deg) rotateX(4deg);
+    }
+    50% {
+      transform: perspective(800px) rotateY(-6deg) rotateX(2deg) translateY(-6px);
+    }
+  }
+  @keyframes drift {
+    to {
+      transform: translate(18%, 12%) scale(1.15);
+    }
+  }
+  @keyframes eq {
+    50% {
+      height: 100%;
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+}
+
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      /* biome-ignore lint/complexity/noImportantStyles: reduced motion has to win over every animation */
+      animation-duration: 0.01ms !important;
+      /* biome-ignore lint/complexity/noImportantStyles: reduced motion has to win over every animation */
+      animation-iteration-count: 1 !important;
+      /* biome-ignore lint/complexity/noImportantStyles: reduced motion has to win over every animation */
+      transition-duration: 0.01ms !important;
+    }
   }
 }

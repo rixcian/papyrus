@@ -24,21 +24,27 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await page.getByRole('button', { name: 'Create Profile' }).click()
   await expect(page.getByRole('heading', { name: 'Your library is empty' })).toBeVisible()
 
-  await page.locator('input[type=file]').setInputFiles({
-    name: 'arrakis.epub',
-    mimeType: 'application/epub+zip',
-    buffer: await buildReadableEpub(),
-  })
+  await page
+    .getByRole('main')
+    .locator('input[type=file]')
+    .setInputFiles({
+      name: 'arrakis.epub',
+      mimeType: 'application/epub+zip',
+      buffer: await buildReadableEpub(),
+    })
   await expect(page.getByText('New Book')).toBeVisible()
-  await page.locator('input[type=file]').setInputFiles({
-    name: 'sietch.epub',
-    mimeType: 'application/epub+zip',
-    buffer: await buildReadableEpub({
-      title: 'Sietch Tales',
-      author: 'Other Writer',
-      tags: ['Desert'],
-    }),
-  })
+  await page
+    .getByRole('main')
+    .locator('input[type=file]')
+    .setInputFiles({
+      name: 'sietch.epub',
+      mimeType: 'application/epub+zip',
+      buffer: await buildReadableEpub({
+        title: 'Sietch Tales',
+        author: 'Other Writer',
+        tags: ['Desert'],
+      }),
+    })
   await expect(page.getByRole('link', { name: /Sietch Tales/ })).toBeVisible()
   await page.screenshot({ path: 'test-results/library.png' })
 
@@ -51,6 +57,7 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await expect(page).toHaveURL(/q=sietc/)
   await page.getByLabel('Search the library').fill('')
   await expect(arrakis).toBeVisible()
+  await page.getByRole('button', { name: 'Tag', exact: true }).click()
   await page.getByRole('button', { name: /^Desert/ }).click()
   await expect(arrakis).toHaveCount(0)
   await page.getByRole('button', { name: 'List' }).click()
@@ -69,6 +76,7 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await page.getByLabel('Shelf name').fill('Desert books')
   await page.getByRole('button', { name: 'Create' }).click()
   await expect(page.getByText('2 selected')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Shelf', exact: true }).click()
   await page.getByRole('button', { name: /^Desert books\s*2$/ }).click()
   await expect(page).toHaveURL(/shelf=/)
   await expect(page.getByText('2 Books')).toBeVisible()
@@ -162,7 +170,7 @@ test('create a Profile, upload a book, read it, and resume on another device', a
   await page.keyboard.press('Escape')
   await page.screenshot({ path: 'test-results/reader-sepia.png' })
 
-  await page.getByRole('link', { name: '← Back' }).click()
+  await page.getByRole('link', { name: 'Back', exact: true }).click()
   await expect(page.getByRole('link', { name: /^Continue · \d+%$/ })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Reading', pressed: true })).toBeVisible()
   await page.goto('/')
@@ -210,7 +218,7 @@ test('create a Profile, upload a book, read it, and resume on another device', a
 
   // Offline Books (ticket 05): save one, lose the connection, and still read it.
   await page.goto('/')
-  await page.locator('a[href^="/books/"]', { hasText: 'Arrakis Notes' }).click()
+  await page.locator('a[href^="/books/"]', { hasText: 'Arrakis Notes' }).last().click()
   await page.getByRole('button', { name: 'Make available offline' }).click()
   await expect(page.getByRole('button', { name: 'Available offline', exact: true })).toBeVisible()
   await page.evaluate(() => navigator.serviceWorker.ready)
@@ -276,7 +284,7 @@ test('create a Profile, upload a book, read it, and resume on another device', a
 
   // Find online (ticket 09): look Arrakis Notes up, copy the description and cover, save.
   await page.goto('/')
-  await page.locator('a[href^="/books/"]', { hasText: 'Arrakis Notes' }).click()
+  await page.locator('a[href^="/books/"]', { hasText: 'Arrakis Notes' }).last().click()
   await page.getByRole('button', { name: 'Edit metadata' }).click()
   await page.getByRole('button', { name: 'Find online' }).click()
   await page.getByRole('button', { name: /Arrakis Notes.*Desert Press/ }).click()
@@ -315,13 +323,16 @@ test('upload an audiobook, listen, and pick up where you left off', async ({ pag
   await page.goto('/')
 
   // Recordings picked together become one Audio File, whatever order they come in.
-  await page.locator('input[type=file]').setInputFiles(
-    ['03-departure.mp3', '01-arrival.mp3', '02-the-lighthouse.mp3'].map((name) => ({
-      name,
-      mimeType: 'audio/mpeg',
-      buffer: fs.readFileSync(path.join(audio, name)),
-    })),
-  )
+  await page
+    .getByRole('main')
+    .locator('input[type=file]')
+    .setInputFiles(
+      ['03-departure.mp3', '01-arrival.mp3', '02-the-lighthouse.mp3'].map((name) => ({
+        name,
+        mimeType: 'audio/mpeg',
+        buffer: fs.readFileSync(path.join(audio, name)),
+      })),
+    )
   await expect(page.getByText('New audiobook The Quiet Shore')).toBeVisible()
   await expect(page.getByRole('img', { name: 'Has audiobook' })).toBeVisible()
 
@@ -336,12 +347,13 @@ test('upload an audiobook, listen, and pick up where you left off', async ({ pag
   // The next Chapter is the next Track.
   await page.getByRole('button', { name: 'Next chapter' }).click()
   await expect(page.getByText('The Lighthouse')).toBeVisible()
-  await expect(elapsed).toHaveText('0:05', { timeout: 5_000 })
+  // The timeline is the Chapter: a second into the Lighthouse, which starts at 0:04.
+  await expect(elapsed).toHaveText('0:01', { timeout: 5_000 })
   await page.getByRole('button', { name: 'Pause' }).click()
 
   await page.getByRole('button', { name: 'Speed' }).click()
   await page.getByRole('menuitemradio', { name: '1.5×' }).click()
-  await expect(page.getByRole('button', { name: 'Speed' })).toHaveText('1.5×')
+  await expect(page.getByRole('button', { name: 'Speed' })).toContainText('1.5×')
 
   await page.getByRole('button', { name: 'Add bookmark' }).click()
   await expect(page.getByText(/Bookmarked 0:0[5-6]/)).toBeVisible()
@@ -350,7 +362,7 @@ test('upload an audiobook, listen, and pick up where you left off', async ({ pag
   await expect(elapsed).toHaveText('0:00')
   await page.getByRole('button', { name: 'Bookmarks', exact: true }).click()
   await page.getByRole('button', { name: /The Lighthouse/ }).click()
-  await expect(elapsed).toHaveText(/0:0[5-6]/)
+  await expect(elapsed).toHaveText(/0:0[1-2]/)
 
   // Browsing keeps it playing in the mini-player.
   await page.getByRole('button', { name: 'Play' }).click()
@@ -371,7 +383,7 @@ test('upload an audiobook, listen, and pick up where you left off', async ({ pag
   await page.waitForTimeout(1_500) // let the outbox write
   await page.reload()
   await expect(elapsed).toHaveText(stoppedAt ?? '')
-  await expect(page.getByRole('button', { name: 'Speed' })).toHaveText('1.5×')
+  await expect(page.getByRole('button', { name: 'Speed' })).toContainText('1.5×')
 
   expect(errors).toEqual([])
 })

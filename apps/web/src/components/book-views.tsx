@@ -250,7 +250,7 @@ function BookCard({ book }: { book: BookSummary }) {
     <li className="group relative">
       <Link
         to={`/books/${book.id}`}
-        className="flex select-none flex-col gap-2 rounded-lg outline-offset-4 [-webkit-touch-callout:none]"
+        className="flex select-none flex-col gap-2 rounded-lg outline-offset-4 transition-transform duration-200 ease-out-soft [-webkit-touch-callout:none] active:scale-[0.97]"
         {...linkProps}
       >
         <BookCover
@@ -258,7 +258,10 @@ function BookCard({ book }: { book: BookSummary }) {
           coverUrl={book.coverUrl}
           progress={progressOf(book)}
           audio={book.formats.includes('audio')}
-          className={cn(selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}
+          className={cn(
+            'transition-[transform,box-shadow] duration-300 ease-out-soft group-hover:-translate-y-1 group-hover:shadow-black/50 group-hover:shadow-xl',
+            selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
+          )}
         />
         <div className="min-w-0">
           <div className="line-clamp-2 font-medium text-sm leading-snug">{book.title}</div>
@@ -298,7 +301,7 @@ function BookRow({ book }: { book: BookSummary }) {
       <Link
         to={`/books/${book.id}`}
         className={cn(
-          'flex h-18 min-w-0 flex-1 select-none items-center gap-3 rounded-md px-2 hover:bg-accent [-webkit-touch-callout:none]',
+          'flex h-18 min-w-0 flex-1 select-none items-center gap-3 rounded-xl px-2 transition-colors duration-200 hover:bg-accent [-webkit-touch-callout:none]',
           selected && 'bg-accent',
         )}
         {...linkProps}

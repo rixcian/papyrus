@@ -21,7 +21,9 @@ export const READER_THEMES: Record<
 > = {
   light: { label: 'Light', bg: '#ffffff', fg: '#1f1f1f', link: '#1d4ed8', dark: false },
   sepia: { label: 'Sepia', bg: '#f4ecd8', fg: '#5b4636', link: '#8a4b14', dark: false },
-  dark: { label: 'Dark', bg: '#1b1a19', fg: '#d8d3cb', link: '#93c5fd', dark: true },
+  // Night's own ground (--background in index.css) with soft zinc text, so the reader sits in
+  // the same dark as the rest of the app.
+  dark: { label: 'Dark', bg: '#101012', fg: '#d4d4d8', link: '#93c5fd', dark: true },
 }
 
 export const DEFAULT_PREFS: ReaderPrefs = {
@@ -29,10 +31,8 @@ export const DEFAULT_PREFS: ReaderPrefs = {
   fontSize: 100,
   lineHeight: 1.5,
   margin: 'normal',
-  theme:
-    typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light',
+  // Night: a new reader opens dark like the rest of the app.
+  theme: 'dark',
   flow: 'paginated',
 }
 

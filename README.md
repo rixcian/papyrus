@@ -24,10 +24,7 @@
 <table align="center">
   <tr>
     <td align="center">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/library-dark.png">
-        <img src="docs/screenshots/library.png" width="250" alt="The library: continue reading, search, filters and a grid of covers">
-      </picture>
+      <img src="docs/screenshots/library.png" width="250" alt="The library: the Book you're reading, tinted with its cover colour, and the others in progress">
       <br><sub>Library</sub>
     </td>
     <td align="center">
@@ -49,8 +46,8 @@
       <br><sub>Highlights and Bookmarks</sub>
     </td>
     <td align="center">
-      <img src="docs/screenshots/library-dark.png" width="250" alt="The library in the dark theme">
-      <br><sub>Dark theme</sub>
+      <img src="docs/screenshots/library-grid.png" width="250" alt="The library: search, filters and a grid of covers">
+      <br><sub>Library grid</sub>
     </td>
   </tr>
 </table>

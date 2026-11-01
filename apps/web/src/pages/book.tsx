@@ -2,11 +2,16 @@ import {
   BookOpenIcon,
   CloudCheckIcon,
   CloudDownloadIcon,
+  DownloadIcon,
   EllipsisIcon,
   HeadphonesIcon,
+  LibraryBigIcon,
+  PencilIcon,
+  Share2Icon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { Ambient } from '@/components/ambient'
 import { BookCover } from '@/components/book-cover'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditBookDialog } from '@/components/edit-book-dialog'
@@ -36,6 +41,7 @@ import {
   useSaveOffline,
 } from '@/lib/offline'
 import { useSession } from '@/lib/session'
+import { cn } from '@/lib/utils'
 import type { OfflineBook } from '@/offline/store'
 import { formatLength } from '@/player/timeline'
 import type { ReadStatus } from '@/sync'
@@ -87,108 +93,167 @@ function BookView({ book }: { book: BookDetail }) {
     ['ISBN', book.isbn],
   ].filter((d): d is [string, string] => Boolean(d[1]))
 
+  const percent = book.lastRead ? Math.round(book.lastRead.fraction * 100) : null
+  const audioFile = book.files.find((f) => f.kind === 'audio')
+  const stats = [
+    percent !== null && book.readStatus !== 'finished' ? [`${percent}%`, 'Read'] : null,
+    book.readStatus === 'finished' ? ['Done', 'Finished'] : null,
+    [
+      book.files
+        .filter((f) => f.readable)
+        .map((f) => f.format.toUpperCase())
+        .filter((f, i, all) => all.indexOf(f) === i)
+        .join(' · ') || '—',
+      'Ebook',
+    ],
+    audioFile ? [audioFile.duration ? formatLength(audioFile.duration) : 'Yes', 'Audiobook'] : null,
+  ].filter((s): s is [string, string] => Boolean(s))
+
   return (
-    <div className="grid gap-8 md:grid-cols-[14rem_1fr]">
-      <BookCover title={book.title} coverUrl={book.coverUrl} className="mx-auto w-44 md:w-full" />
-      <div className="min-w-0">
-        <h1 className="font-semibold text-2xl tracking-tight">{book.title}</h1>
-        {book.authors.length > 0 && (
-          <p className="mt-1 text-lg text-muted-foreground">{book.authors.join(', ')}</p>
-        )}
-        {book.seriesName && (
-          <p className="mt-1 text-muted-foreground text-sm">
-            {book.seriesName}
-            {book.seriesIndex != null && ` #${book.seriesIndex}`}
-          </p>
-        )}
-        {!book.owned && (
-          <p className="mt-1 text-muted-foreground text-sm">
-            Shared by {book.sharedBy}
-            {book.hidden && ' · Hidden from your library'}
-          </p>
-        )}
-        {book.share && (
-          <p className="mt-1 text-muted-foreground text-sm">{describeShare(book.share)}</p>
+    <div className="grid gap-8 md:grid-cols-[16rem_minmax(0,1fr)] md:gap-12 md:pt-6">
+      <Ambient coverUrl={book.coverUrl} className="h-[36rem]" />
+      <BookCover
+        title={book.title}
+        coverUrl={book.coverUrl}
+        className="mx-auto w-44 animate-cover-in self-start shadow-2xl shadow-black/60 md:w-full"
+      />
+      <div className="min-w-0 animate-rise [animation-delay:60ms]">
+        <div className="text-center md:text-start">
+          <h1 className="text-balance font-semibold text-3xl tracking-tight">{book.title}</h1>
+          {book.authors.length > 0 && (
+            <p className="mt-1 text-lg text-muted-foreground">{book.authors.join(', ')}</p>
+          )}
+          {book.seriesName && (
+            <p className="mt-1 text-muted-foreground text-sm">
+              {book.seriesName}
+              {book.seriesIndex != null && ` #${book.seriesIndex}`}
+            </p>
+          )}
+          {!book.owned && (
+            <p className="mt-1 text-muted-foreground text-sm">
+              Shared by {book.sharedBy}
+              {book.hidden && ' · Hidden from your library'}
+            </p>
+          )}
+          {book.share && (
+            <p className="mt-1 text-muted-foreground text-sm">{describeShare(book.share)}</p>
+          )}
+        </div>
+
+        <dl
+          className="mt-6 grid divide-x rounded-2xl border bg-card/60 backdrop-blur"
+          style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))` }}
+        >
+          {stats.map(([value, label]) => (
+            <div key={label} className="flex flex-col-reverse items-center px-2 py-3 text-center">
+              <dt className="text-muted-foreground text-xs">{label}</dt>
+              <dd className="truncate font-semibold tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {(readable || listenable) && (
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            {readable && (
+              <Button
+                size="lg"
+                variant={listenable && lastListened ? 'secondary' : 'default'}
+                className="h-12 rounded-full text-base sm:flex-1"
+                render={<Link to={`/read/${readable.id}`} />}
+              >
+                <BookOpenIcon />
+                {lastRead && book.lastRead
+                  ? `Continue · ${Math.round(book.lastRead.fraction * 100)}%`
+                  : 'Read'}
+              </Button>
+            )}
+            {listenable && (
+              <Button
+                size="lg"
+                variant={readable && !lastListened ? 'secondary' : 'default'}
+                className="h-12 rounded-full text-base sm:flex-1"
+                render={<Link to={`/listen/${listenable.id}`} />}
+              >
+                <HeadphonesIcon />
+                {timeLeft ? `Listen · ${timeLeft} left` : 'Listen'}
+              </Button>
+            )}
+          </div>
         )}
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {readable && (
-            <Button
-              variant={listenable && lastListened ? 'outline' : 'default'}
-              render={<Link to={`/read/${readable.id}`} />}
-            >
-              <BookOpenIcon />
-              {lastRead && book.lastRead
-                ? `Continue · ${Math.round(book.lastRead.fraction * 100)}%`
-                : 'Read'}
-            </Button>
-          )}
-          {listenable && (
-            <Button
-              variant={readable && !lastListened ? 'outline' : 'default'}
-              render={<Link to={`/listen/${listenable.id}`} />}
-            >
-              <HeadphonesIcon />
-              {timeLeft ? `Listen · ${timeLeft} left` : 'Listen'}
-            </Button>
-          )}
-          {readable && (
-            <Button
-              variant="outline"
-              render={<a href={`/api/books/${book.id}/highlights.md`} download />}
-            >
-              Export highlights
-            </Button>
-          )}
-          {book.owned && (
-            <>
-              <Button variant="outline" onClick={() => setEditing(true)}>
-                Edit metadata
-              </Button>
-              <Button variant="outline" onClick={() => setSharing(true)}>
-                Share
-              </Button>
-              <Menu>
-                <MenuTrigger
-                  render={<Button variant="outline" size="icon" aria-label="More actions" />}
-                >
-                  <EllipsisIcon />
-                </MenuTrigger>
-                <MenuPopup align="end">
-                  <MenuItem onClick={() => setMerging(true)}>Merge into…</MenuItem>
-                  <MenuItem variant="destructive" onClick={() => setDeleting(true)}>
-                    Delete
-                  </MenuItem>
-                </MenuPopup>
-              </Menu>
-            </>
-          )}
-          <OfflineToggle book={book} />
+        <ReadStatusControl bookId={book.id} status={book.readStatus} />
+
+        <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start [&_button]:rounded-full [&_a]:rounded-full">
           <ShelvesMenu
             bookIds={[book.id]}
             onShelves={book.shelves.map((s) => s.id)}
-            trigger={<Button variant="outline">Shelves</Button>}
+            trigger={
+              <Button variant="outline" size="sm">
+                <LibraryBigIcon />
+                Shelves
+              </Button>
+            }
           />
+          {book.owned && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setSharing(true)}>
+                <Share2Icon />
+                Share
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <PencilIcon />
+                Edit metadata
+              </Button>
+            </>
+          )}
+          <OfflineToggle book={book} />
+          {readable && (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<a href={`/api/books/${book.id}/highlights.md`} download />}
+            >
+              <DownloadIcon />
+              Export highlights
+            </Button>
+          )}
           {!book.owned && (
             <Button
               variant="outline"
+              size="sm"
               disabled={setHidden.isPending}
               onClick={() => setHidden.mutate({ bookIds: [book.id], hidden: !book.hidden })}
             >
               {book.hidden ? 'Unhide' : 'Hide from my library'}
             </Button>
           )}
+          {book.owned && (
+            <Menu>
+              <MenuTrigger
+                render={<Button variant="outline" size="icon-sm" aria-label="More actions" />}
+              >
+                <EllipsisIcon />
+              </MenuTrigger>
+              <MenuPopup align="end">
+                <MenuItem onClick={() => setMerging(true)}>Merge into…</MenuItem>
+                <MenuItem variant="destructive" onClick={() => setDeleting(true)}>
+                  Delete
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
+          )}
         </div>
 
-        <ReadStatusControl bookId={book.id} status={book.readStatus} />
-
         {book.shelves.length > 0 && (
-          <p className="mt-3 text-muted-foreground text-sm">
+          <p className="mt-4 text-center text-muted-foreground text-sm md:text-start">
             On{' '}
             {book.shelves.map((shelf, i) => (
               <span key={shelf.id}>
                 {i > 0 && ', '}
-                <Link to={`/?shelf=${shelf.id}`} className="underline underline-offset-2">
+                <Link
+                  to={`/?shelf=${shelf.id}`}
+                  className="text-foreground underline-offset-2 hover:underline"
+                >
                   {shelf.name}
                 </Link>
               </span>
@@ -196,22 +261,25 @@ function BookView({ book }: { book: BookDetail }) {
           </p>
         )}
 
+        {book.description && (
+          <section className="mt-8">
+            <h2 className="mb-2 font-semibold">About</h2>
+            <Description text={book.description} />
+          </section>
+        )}
+
         {book.tags.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-1.5">
             {book.tags.map((tag) => (
-              <Badge key={tag} variant="secondary">
+              <Badge key={tag} variant="secondary" className="rounded-full">
                 {tag}
               </Badge>
             ))}
           </div>
         )}
 
-        {book.description && (
-          <p className="mt-6 max-w-prose whitespace-pre-line leading-relaxed">{book.description}</p>
-        )}
-
         {details.length > 0 && (
-          <dl className="mt-6 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+          <dl className="mt-6 grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
             {details.map(([term, value]) => (
               <div key={term} className="contents">
                 <dt className="text-muted-foreground">{term}</dt>
@@ -222,7 +290,7 @@ function BookView({ book }: { book: BookDetail }) {
         )}
 
         <h2 className="mt-8 mb-2 font-semibold">Files</h2>
-        <ul className="divide-y rounded-xl border">
+        <ul className="divide-y overflow-hidden rounded-2xl border bg-card/60">
           {book.files.map((file) => (
             <FileRow
               key={file.id}
@@ -278,7 +346,7 @@ function OfflineToggle({ book }: { book: BookDetail }) {
   const hasAudio = book.files.some((f) => f.kind === 'audio')
   if (save.isPending)
     return (
-      <Button variant="outline" disabled className="relative overflow-hidden">
+      <Button variant="outline" size="sm" disabled className="relative overflow-hidden">
         Saving for offline…
         {save.progress !== null && ` ${Math.round(save.progress * 100)}%`}
         <span
@@ -292,6 +360,7 @@ function OfflineToggle({ book }: { book: BookDetail }) {
     <>
       <Button
         variant="outline"
+        size="sm"
         aria-pressed={saved}
         disabled={remove.isPending}
         onClick={() =>
@@ -323,20 +392,27 @@ function OfflineToggle({ book }: { book: BookDetail }) {
 /** Book detail with no connection: what this device saved is enough to read. */
 function OfflineBookView({ book }: { book: OfflineBook }) {
   return (
-    <div className="grid gap-8 md:grid-cols-[14rem_1fr]">
-      <BookCover title={book.title} coverUrl={book.coverUrl} className="mx-auto w-44 md:w-full" />
-      <div className="min-w-0">
-        <h1 className="font-semibold text-2xl tracking-tight">{book.title}</h1>
+    <div className="grid gap-8 md:grid-cols-[16rem_minmax(0,1fr)] md:gap-12 md:pt-6">
+      <Ambient coverUrl={book.coverUrl} className="h-[36rem]" />
+      <BookCover
+        title={book.title}
+        coverUrl={book.coverUrl}
+        className="mx-auto w-44 animate-cover-in self-start shadow-2xl shadow-black/60 md:w-full"
+      />
+      <div className="min-w-0 animate-rise text-center md:text-start">
+        <h1 className="text-balance font-semibold text-3xl tracking-tight">{book.title}</h1>
         {book.authors.length > 0 && (
           <p className="mt-1 text-lg text-muted-foreground">{book.authors.join(', ')}</p>
         )}
         <p className="mt-3 text-muted-foreground text-sm">
           You're offline. This Book is saved on this device.
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
           {book.files.map((file) => (
             <Button
               key={file.id}
+              size="lg"
+              className="rounded-full"
               render={<Link to={`/${file.audio ? 'listen' : 'read'}/${file.id}`} />}
             >
               {file.audio ? 'Listen' : 'Read'}{' '}
@@ -358,21 +434,57 @@ const STATUS_LABELS: Record<ReadStatus, string> = {
 function ReadStatusControl({ bookId, status }: { bookId: string; status: ReadStatus }) {
   const { data: profile } = useSession()
   const setStatus = useSetReadStatus(profile?.id ?? '')
+  const statuses = Object.keys(STATUS_LABELS) as ReadStatus[]
+  // Moves at once on a tap; the server's answer follows.
+  const shown = setStatus.isPending ? (setStatus.variables?.status ?? status) : status
   return (
-    <fieldset className="mt-4 flex items-center gap-1.5">
+    <fieldset className="relative mt-4 grid grid-cols-3 rounded-full bg-muted p-1">
       <legend className="sr-only">Read status</legend>
-      {(Object.keys(STATUS_LABELS) as ReadStatus[]).map((s) => (
-        <Button
+      <span
+        aria-hidden
+        className="absolute inset-y-1 start-1 w-[calc((100%-0.5rem)/3)] rounded-full bg-accent shadow-sm ring-1 ring-white/10 transition-transform duration-500 ease-spring"
+        style={{ transform: `translateX(${statuses.indexOf(shown) * 100}%)` }}
+      />
+      {statuses.map((s) => (
+        <button
           key={s}
-          size="xs"
-          variant={s === status ? 'secondary' : 'ghost'}
+          type="button"
           aria-pressed={s === status}
+          className="relative h-9 rounded-full font-medium text-muted-foreground text-sm transition-colors duration-300 aria-pressed:text-foreground"
           onClick={() => s !== status && setStatus.mutate({ bookId, status: s })}
         >
           {STATUS_LABELS[s]}
-        </Button>
+        </button>
       ))}
     </fieldset>
+  )
+}
+
+/** A long description shows its first lines; More opens the rest. */
+function Description({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const long = text.length > 360
+  return (
+    <div>
+      <p
+        className={cn(
+          'max-w-prose whitespace-pre-line text-muted-foreground leading-relaxed',
+          long && !open && 'line-clamp-5',
+        )}
+      >
+        {text}
+      </p>
+      {long && (
+        <button
+          type="button"
+          className="mt-1 font-medium text-sm hover:underline"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? 'Less' : 'More'}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -403,7 +515,7 @@ function FileRow({
   const [splitting, setSplitting] = useState(false)
 
   return (
-    <li className="flex items-center gap-3 px-3 py-2.5 text-sm">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm">
       <Badge variant="outline" className={file.kind === 'audio' ? undefined : 'uppercase'}>
         {file.kind === 'audio' ? 'Audiobook' : file.format}
       </Badge>
@@ -423,29 +535,31 @@ function FileRow({
         <span className="min-w-0 flex-1 truncate">{file.originalName}</span>
       )}
       <span className="text-muted-foreground tabular-nums">{formatSize(file.size)}</span>
-      {file.kind === 'audio' && (
-        <Button variant="ghost" size="sm" render={<Link to={`/listen/${file.id}`} />}>
-          Listen
-        </Button>
-      )}
-      {file.readable && (
-        <Button variant="ghost" size="sm" render={<Link to={`/read/${file.id}`} />}>
-          Read
-        </Button>
-      )}
-      <Button variant="ghost" size="sm" render={<a href={`${file.url}?download=1`} download />}>
-        Download
-      </Button>
-      {canReshape && (
-        <>
-          <Button variant="ghost" size="sm" onClick={() => setSplitting(true)}>
-            Split
+      <div className="-me-1.5 flex w-full flex-wrap justify-end sm:w-auto">
+        {file.kind === 'audio' && (
+          <Button variant="ghost" size="sm" render={<Link to={`/listen/${file.id}`} />}>
+            Listen
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setRemoving(true)}>
-            Remove
+        )}
+        {file.readable && (
+          <Button variant="ghost" size="sm" render={<Link to={`/read/${file.id}`} />}>
+            Read
           </Button>
-        </>
-      )}
+        )}
+        <Button variant="ghost" size="sm" render={<a href={`${file.url}?download=1`} download />}>
+          Download
+        </Button>
+        {canReshape && (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setSplitting(true)}>
+              Split
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setRemoving(true)}>
+              Remove
+            </Button>
+          </>
+        )}
+      </div>
       <ConfirmDialog
         open={splitting}
         onOpenChange={setSplitting}

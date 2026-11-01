@@ -52,6 +52,20 @@ export function previousChapterStart(chapters: TimelineChapter[], time: number):
   return (chapters[i - 1] as TimelineChapter).start
 }
 
+/**
+ * Where the Chapter playing at a time begins and ends, for a timeline of just that Chapter.
+ * With no Chapters, or before the first, the span is the whole File.
+ */
+export function chapterSpan(
+  chapters: TimelineChapter[],
+  duration: number,
+  time: number,
+): { start: number; end: number } {
+  const i = chapterAt(chapters, time)
+  if (i < 0) return { start: 0, end: chapters[0]?.start ?? duration }
+  return { start: (chapters[i] as TimelineChapter).start, end: chapters[i + 1]?.start ?? duration }
+}
+
 export function nextChapterStart(chapters: TimelineChapter[], time: number): number | undefined {
   return chapters[chapterAt(chapters, time) + 1]?.start
 }

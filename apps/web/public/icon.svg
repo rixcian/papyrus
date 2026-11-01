@@ -1,7 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><title>Papyrus</title>
-  <rect width="512" height="512" rx="112" fill="#1f1a14"/>
-  <g fill="none" stroke="#f3e9d2" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
-    <path d="M256 170c-40-30-92-38-140-30v214c48-8 100 0 140 30 40-30 92-38 140-30V140c-48-8-100 0-140 30z"/>
-    <path d="M256 170v214"/>
+  <defs>
+    <linearGradient id="sand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f3e7cb"/>
+      <stop offset="1" stop-color="#d6bd8c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#141210"/>
+  <rect x="164" y="150" width="184" height="212" fill="url(#sand)"/>
+  <g stroke="#7a6440" stroke-width="13" stroke-linecap="round">
+    <path d="M200 212h112M200 246h80"/>
   </g>
+  <path d="M204 278v38l32-19z" fill="#7a6440" stroke="#7a6440" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="132" y="120" width="248" height="56" rx="28" fill="#efe2c4"/>
+  <rect x="132" y="336" width="248" height="56" rx="28" fill="#e3d0a6"/>
+  <circle cx="160" cy="148" r="14" fill="#c7ad78"/>
+  <circle cx="352" cy="364" r="14" fill="#b99c63"/>
 </svg>

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   audioLocation,
   chapterAt,
+  chapterSpan,
   formatClock,
   formatLength,
   locate,
@@ -58,5 +59,23 @@ describe('the audio timeline', () => {
     expect(resumeTime(100, hlc(60_000), now)).toBe(100)
     expect(resumeTime(100, hlc(11 * 60_000), now)).toBe(95)
     expect(resumeTime(2, hlc(11 * 60_000), now)).toBe(0)
+  })
+})
+
+describe('chapterSpan', () => {
+  it('spans the Chapter playing, up to where the next begins', () => {
+    expect(chapterSpan(chapters, 35, 12)).toEqual({ start: 10, end: 30 })
+  })
+
+  it('runs the last Chapter to the end of the File', () => {
+    expect(chapterSpan(chapters, 35, 31)).toEqual({ start: 30, end: 35 })
+  })
+
+  it('spans the whole File when there are no Chapters', () => {
+    expect(chapterSpan([], 35, 12)).toEqual({ start: 0, end: 35 })
+  })
+
+  it('spans up to the first Chapter before it begins', () => {
+    expect(chapterSpan([{ title: 'Late', start: 8 }], 35, 2)).toEqual({ start: 0, end: 8 })
   })
 })
