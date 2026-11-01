@@ -21,8 +21,9 @@ COPY tools/api-codegen/package.json tools/api-codegen/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 
 COPY . .
-# Shown in Settings → This device; there is no .git in the build context.
-ARG PAPYRUS_VERSION=dev
+# Shown in Settings → This device. CI passes the release version; left empty, it is the
+# package.json version and the build date (there is no .git in the build context).
+ARG PAPYRUS_VERSION=
 RUN PAPYRUS_VERSION=${PAPYRUS_VERSION} pnpm --filter @papyrus/web build \
   && pnpm --filter @papyrus/server build
 # The server is one esbuild bundle; only better-sqlite3 (native) needs node_modules.

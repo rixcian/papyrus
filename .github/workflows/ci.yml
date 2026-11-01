@@ -1,11 +1,11 @@
-# Checks on every push and pull request; images to GHCR from the default branch and from
-# version tags (ticket 11).
+# Checks on every push and pull request; images to GHCR from the default branch. The release
+# version is the "version" in the root package.json: when it isn't in GHCR yet, the image is
+# also tagged X.Y.Z, X.Y and latest. Bump it to release.
 name: CI
 
 on:
   push:
     branches: ["**"]
-    tags: ["v*.*.*"]
   pull_request:
 
 concurrency:
@@ -51,8 +51,7 @@ jobs:
     needs: check
     if: >-
       github.event_name == 'push' &&
-      (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
-      startsWith(github.ref, 'refs/tags/v'))
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -66,17 +65,42 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - id: version
+        name: Version from package.json
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/papyrus
+        run: |
+          version=$(node -p "require('./package.json').version")
+          image=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          if docker manifest inspect "$image:$version" > /dev/null 2>&1; then
+            echo "$version is already published; this build is tagged main and sha-* only."
+            release=false
+            app_version="$version+${GITHUB_SHA::7}"
+          else
+            release=true
+            app_version="$version"
+          fi
+          # A prerelease (0.2.0-beta.1) gets its own tag but doesn't move X.Y or latest.
+          stable=$release
+          [[ "$version" == *-* ]] && stable=false
+          {
+            echo "version=$version"
+            echo "minor=$(echo "$version" | cut -d. -f1-2)"
+            echo "release=$release"
+            echo "stable=$stable"
+            echo "app_version=$app_version"
+          } >> "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/papyrus
           flavor: latest=false
           tags: |
-            type=raw,value=main,enable={{is_default_branch}}
+            type=raw,value=main
             type=sha,prefix=sha-,format=short
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.release }}
+            type=raw,value=${{ steps.version.outputs.minor }},enable=${{ steps.version.outputs.stable }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.stable }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -84,6 +108,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: PAPYRUS_VERSION=${{ steps.meta.outputs.version }}
+          build-args: PAPYRUS_VERSION=${{ steps.version.outputs.app_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

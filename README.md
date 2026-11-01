@@ -93,6 +93,8 @@ On Tailscale, `tailscale serve --bg 8080` gives you HTTPS on your tailnet withou
 
 Images are built for `linux/amd64`.
 
+The version is the `version` in the root `package.json`. To release, bump it (`X.Y.Z`, following semver) and push to the default branch: the first image built with a version that isn't in GHCR yet is also tagged `X.Y.Z`, `X.Y` and `latest`. A prerelease such as `0.2.0-beta.1` gets only its own tag.
+
 ## Configuration
 
 Everything is set with environment variables; all are optional.
@@ -199,4 +201,4 @@ Layout:
 
 The words the code and docs use (Profile, Book, File, Share, Offline Book, …) are defined in [`GLOSSARY.md`](GLOSSARY.md); decisions that are hard to reverse are in [`docs/adr/`](docs/adr/).
 
-CI (`.github/workflows/ci.yml`) runs the checks, tests and end-to-end test on every push and pull request, and publishes the image to GHCR from the default branch and from `v*.*.*` tags.
+CI (`.github/workflows/ci.yml`) runs the checks, tests and end-to-end test on every push and pull request, and publishes the image to GHCR from the default branch, as a release when the `package.json` version is new (see [Image tags](#image-tags)).
